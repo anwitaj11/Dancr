@@ -2,6 +2,7 @@ import os
 import tempfile
 
 os.environ["DABLAB_DB"] = tempfile.mktemp(suffix=".db")
+os.environ["DABLAB_MEDIA"] = tempfile.mkdtemp()
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ.pop("ELEVENLABS_API_KEY", None)
 
@@ -37,6 +38,12 @@ def test_full_flow():
         assert listing[0]["steps"] == 1 and listing[0]["duration"] == 4.0
         assert client.get(f"/dances/{dance_id}").json()["data"]["fps"] == 30
         assert client.get("/dances/999").status_code == 404
+
+        assert client.get(f"/dances/{dance_id}").json()["hasVideo"] is False
+        assert client.put(f"/dances/{dance_id}/video", content=b"x", headers={"content-type": "text/plain"}).status_code == 415
+        assert client.put(f"/dances/{dance_id}/video", content=b"fakemp4", headers={"content-type": "video/mp4"}).status_code == 200
+        assert client.get(f"/dances/{dance_id}").json()["hasVideo"] is True
+        assert client.get(f"/dances/{dance_id}/video").content == b"fakemp4"
 
         # five weak, late tries on one step → slow + timing + legs detail drill
         for _ in range(5):

@@ -60,7 +60,9 @@ The data format is in [`docs/dance-format.md`](docs/dance-format.md).
 |---|---|---|
 | `POST` | `/dances` | Save a dance (`{name, bpm, builtin, difficulty, data}`) |
 | `GET` | `/dances` | List the library (metadata only) |
-| `GET` | `/dances/{id}` | Full dance JSON |
+| `GET` | `/dances/{id}` | Full dance JSON, plus `hasVideo` |
+| `PUT` | `/dances/{id}/video` | Store the original clip (raw body, `video/mp4`, `video/webm` or `video/quicktime`) |
+| `GET` | `/dances/{id}/video` | The original clip, shown as the tutorial on the practice screen |
 | `POST` | `/attempts` | Save a loop result and get back the updated profile |
 | `GET` | `/profile/{user}` | Skills, patterns, adaptations, badge, history |
 | `POST` | `/coach` | One-sentence tip (`{user, context}`) |
@@ -72,7 +74,7 @@ The data format is in [`docs/dance-format.md`](docs/dance-format.md).
 ## Still to do
 
 - [ ] **Record the real reference videos** and upload them with "Add to the built-in library" ticked.
-  The seeded dances are keyframed placeholders.
+  The seeded dances are keyframed placeholders with no video, so their tutorial side shows a neon stick figure.
 - [ ] Hand-check each built-in's step boundaries (`steps` in the dance JSON) against the choreography.
 - [ ] Tune the thresholds on real dancers: `PASS_SCORE` and the 45° falloff in `scoring.js`, and
   the pattern thresholds in `learner.py`.

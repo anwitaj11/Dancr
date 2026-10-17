@@ -155,7 +155,7 @@ def report(profile: dict) -> dict:
     return {
         "strengths": [f"Your {p} are at {parts[p]:.0%}." for p in ranked[:2]] or ["You showed up and danced!"],
         "weaknesses": [f"Your {p} are at {parts[p]:.0%}." for p in ranked[-1:]] if ranked else [],
-        "plan": ["Warm up with the step you passed last.", "Drill your weakest body part at 0.75x.",
+        "plan": ["Warm up with the step you passed last.", "Drill your weakest body part at 0.7x.",
                  "Try the full dance at 1x."],
         "source": "rules",
     }

@@ -105,7 +105,7 @@ def adaptations(patterns: list[dict]) -> dict:
         "rhythmMode": False, "suggestBreak": False, "unlockHarder": False,
     }
     if "slow" in ids:
-        settings.update(chunkCounts=4, speed=0.75)
+        settings.update(chunkCounts=4, speed=0.7)
     if "fast" in ids:
         settings.update(chunkCounts=16, unlockHarder=True)
     for p in patterns:

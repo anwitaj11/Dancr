@@ -1,11 +1,13 @@
 import json
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
@@ -21,6 +23,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Dab Lab API", lifespan=lifespan)
+
+# Reference videos for uploaded dances (the dance JSON only holds poses and angles).
+MEDIA_DIR = Path(os.getenv("DABLAB_MEDIA", Path(__file__).parent.parent / "media"))
+VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}
+MAX_VIDEO_BYTES = 200 * 1024 * 1024
+
+
+def _video_path(dance_id: int) -> Path | None:
+    return next(MEDIA_DIR.glob(f"{dance_id}.*"), None) if MEDIA_DIR.exists() else None
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -95,7 +106,35 @@ def get_dance(dance_id: int):
     if not r:
         raise HTTPException(404, "dance not found")
     return {"id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
-            "difficulty": r["difficulty"], "data": loads(r["data"])}
+            "difficulty": r["difficulty"], "hasVideo": _video_path(dance_id) is not None,
+            "data": loads(r["data"])}
+
+
+@app.put("/dances/{dance_id}/video")
+async def upload_video(dance_id: int, request: Request):
+    """Raw video bytes in the body, with the file's Content-Type."""
+    ext = VIDEO_TYPES.get(request.headers.get("content-type", "").split(";")[0])
+    if not ext:
+        raise HTTPException(415, f"video must be one of {', '.join(VIDEO_TYPES)}")
+    with session() as conn:
+        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
+            raise HTTPException(404, "dance not found")
+    body = await request.body()
+    if len(body) > MAX_VIDEO_BYTES:
+        raise HTTPException(413, "video too large")
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    if old := _video_path(dance_id):
+        old.unlink()
+    (MEDIA_DIR / f"{dance_id}{ext}").write_bytes(body)
+    return {"ok": True}
+
+
+@app.get("/dances/{dance_id}/video")
+def get_video(dance_id: int):
+    path = _video_path(dance_id)
+    if not path:
+        raise HTTPException(404, "no video for this dance")
+    return FileResponse(path)
 
 
 # ---------- attempts & profile ----------

@@ -4,7 +4,7 @@ import { splitIntoSteps } from './steps.js'
 export const DANCE_FORMAT_VERSION = 1
 
 /** Assemble the dance JSON stored by the backend (see docs/dance-format.md). */
-export function buildDance({ name, bpm, countStart = 0, fps = 30, aspect = 16 / 9, frames, steps, source = 'upload' }) {
+export function buildDance({ name, bpm, countStart = 0, fps = 30, aspect = 16 / 9, videoOffset = 0, frames, steps, source = 'upload' }) {
   const withAngles = frames.map((f) => ({ t: f.t, angles: f.angles ?? computeAngles(f.pose, aspect), pose: f.pose }))
   const duration = withAngles[withAngles.length - 1].t
   return {
@@ -14,6 +14,7 @@ export function buildDance({ name, bpm, countStart = 0, fps = 30, aspect = 16 / 
     fps,
     aspect: Math.round(aspect * 1000) / 1000,
     countStart,
+    videoOffset, // add to frame time to get source-video time
     source,
     frames: withAngles,
     steps: steps ?? splitIntoSteps(duration, bpm, countStart),

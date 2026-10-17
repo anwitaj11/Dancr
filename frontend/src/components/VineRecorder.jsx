@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import RailButton from './RailButton.jsx'
 
 const SECONDS = 6
 
-/** Records 6 seconds of a canvas into a looping, downloadable Vine-style clip. */
+/** Rail button that records 6 seconds of a canvas into a looping, downloadable clip. */
 export default function VineRecorder({ canvasRef, name = 'dab-lab' }) {
   const [state, setState] = useState('idle') // idle | recording | done
   const [url, setUrl] = useState(null)
@@ -24,16 +25,21 @@ export default function VineRecorder({ canvasRef, name = 'dab-lab' }) {
   }
 
   return (
-    <div className="vine">
-      <button className="btn" onClick={record} disabled={state === 'recording'}>
-        {state === 'recording' ? '🔴 Recording…' : '🎬 Record a 6s Vine'}
-      </button>
+    <>
+      <RailButton icon={state === 'recording' ? <span className="rec-dot" /> : '🎬'}
+        label={state === 'recording' ? 'Rec…' : '6s Vine'} active={state === 'recording'}
+        disabled={state === 'recording'} onClick={record} />
       {url && state === 'done' && (
-        <div className="vine-result">
-          <video src={url} autoPlay loop muted playsInline />
-          <a className="btn" href={url} download={`${name}-vine.webm`}>⬇️ Download</a>
+        <div className="modal" onClick={() => setState('idle')}>
+          <div className="vine-result" onClick={(e) => e.stopPropagation()}>
+            <video src={url} autoPlay loop muted playsInline />
+            <div className="row center">
+              <a className="btn" href={url} download={`${name}-vine.webm`}>Save</a>
+              <button className="btn ghost" onClick={() => setState('idle')}>Close</button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

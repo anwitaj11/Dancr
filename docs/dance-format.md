@@ -11,6 +11,7 @@ Every dance (built-in, uploaded, or remixed) is one JSON object, stored in the
   "fps": 30,
   "aspect": 1.778,        // source video width / height (angles depend on it)
   "countStart": 0.0,      // seconds: when count 1 of step 1 lands
+  "videoOffset": 0.4,     // seconds: add to frame time to get time in the original clip
   "source": "builtin",    // builtin | upload | remix
   "frames": [
     {

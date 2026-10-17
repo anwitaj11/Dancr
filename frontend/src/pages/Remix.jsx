@@ -40,7 +40,7 @@ export default function Remix() {
   if (!dance) return <p className="muted">Loading…</p>
 
   return (
-    <section>
+    <section className="narrow">
       <h1>Remix {dance.name} 🎛️</h1>
       <div className="row wrap">
         {Object.entries(PRESETS).map(([key, p]) => (
@@ -56,10 +56,10 @@ export default function Remix() {
       </div>
       {explanation && <p className="tip">🤖 {explanation}</p>}
       <div className="stage">
-        <div className="panel"><h3>Original</h3><SkeletonPlayer dance={dance} width={360} height={360} /></div>
-        {remixed && <div className="panel"><h3>{label}</h3><SkeletonPlayer dance={remixed} width={360} height={360} color="#ff7ad9" /></div>}
+        <div className="panel"><h3>Original</h3><SkeletonPlayer dance={dance} /></div>
+        {remixed && <div className="panel"><h3>{label}</h3><SkeletonPlayer dance={remixed} color="#fe2c55" /></div>}
       </div>
-      {remixed && <button className="btn" onClick={practice}>💃 Practice this remix</button>}
+      {remixed && <button className="btn wide" onClick={practice}>💃 Practice this remix</button>}
     </section>
   )
 }

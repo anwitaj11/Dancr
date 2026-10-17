@@ -1,9 +1,12 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.db
 backend/audio_cache/
+backend/media/
 frontend/public/mediapipe/wasm/
 .pytest_cache/

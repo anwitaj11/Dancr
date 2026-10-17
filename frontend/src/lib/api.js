@@ -23,6 +23,10 @@ export const api = {
   report: (user) => json(`/report/${encodeURIComponent(user)}`, { method: 'POST' }),
   tts: (text) => request('/tts', { method: 'POST', body: { text } }).then((r) => r.blob()),
   remix: (text) => json('/remix', { method: 'POST', body: { request: text } }),
+  uploadVideo: (id, file) =>
+    fetch(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      .then((r) => { if (!r.ok) throw new Error(`video upload failed: ${r.status}`) }),
+  videoUrl: (id) => `${API_URL}/dances/${id}/video`,
 }
 
 export function currentUser() {
