@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import { AngleSmoother, bodyInFrame, computeAngles } from '../lib/angles.js'
 import { BODY_PARTS, JOINT_NAMES, LABELS, P } from '../lib/joints.js'
-import { LoopStats, PASS_SCORE, colorFor, countAt, matchWithTiming, timingLabel } from '../lib/scoring.js'
+import { LoopStats, PASS_SCORE, colorFor, countAt, matchWithTiming, ratingFor, timingLabel } from '../lib/scoring.js'
 import { buildChunks } from '../lib/steps.js'
 import { click, say } from '../lib/voice.js'
 import { useWebcamPose } from '../hooks/useWebcamPose.js'
@@ -68,7 +68,7 @@ export default function Practice() {
   const [profile, setProfile] = useState(null)
   const [chunkCounts, setChunkCounts] = useState(8)
   const [chunkIdx, setChunkIdx] = useState(0)
-  const [unlocked, setUnlocked] = useState(0)
+  const [passed, setPassed] = useState(() => new Set()) // steps completed this session
   const [speed, setSpeed] = useState(1)
   const [mirror, setMirror] = useState(true)
   const [loop, setLoop] = useState(true)
@@ -174,7 +174,7 @@ export default function Practice() {
 
     if (summary.passed) {
       const last = chunkIdx === chunks.length - 1
-      setUnlocked((u) => Math.max(u, chunkIdx + 1))
+      setPassed((prev) => new Set(prev).add(chunkIdx))
       setCelebrate(last ? 'dance' : 'step')
       say(last ? 'You nailed it!' : 'Step complete!')
     } else {
@@ -255,8 +255,14 @@ export default function Practice() {
       }
       // Burn the score into the frame so it shows up in Vine recordings.
       ctx.font = `900 ${Math.round(canvas.height / 14)}px 'DM Sans', system-ui`
-      ctx.fillStyle = colorFor(match.overall)
-      ctx.fillText(`${Math.round(match.overall * 100)}%`, 16, canvas.height - 20)
+      const rating = ratingFor(match.overall)
+      const label = `${rating.label} ${Math.round(match.overall * 100)}%`
+      ctx.fillStyle = rating.color
+      ctx.strokeStyle = '#1d1030'
+      ctx.lineWidth = Math.max(3, canvas.height / 160)
+      const x = (canvas.width - ctx.measureText(label).width) / 2, y = canvas.height * 0.17
+      ctx.strokeText(label, x, y)
+      ctx.fillText(label, x, y)
     } else {
       setOutOfFrame(true)
     }
@@ -349,6 +355,9 @@ export default function Practice() {
                 {phase === 'dancing' && live && (
                   <>
                     <ScoreRing value={ringValue} />
+                    <span className="live-rating" key={ratingFor(live.overall).label} style={{ '--c': ratingFor(live.overall).color }}>
+                      {ratingFor(live.overall).label}!
+                    </span>
                     <span className={`beat-count ${loud ? 'loud' : ''}`}>{live.count}</span>
                     <span className={`timing-tag ${timingLabel(live.offset).replace(' ', '-')}`}>{timingLabel(live.offset)}</span>
                     <div className="part-pills">
@@ -378,14 +387,14 @@ export default function Practice() {
               <RailButton icon="🔁" label="Loop" active={loop} onClick={() => setLoop((l) => !l)} />
               {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
               <RailButton icon={<span className="speed-icon">{chunkCounts}</span>} label="Counts" disabled={busy}
-                onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setUnlocked(0) }} />
+                onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setPassed(new Set()) }} />
               <VineRecorder canvasRef={canvasRef} name={dance.name.toLowerCase().replace(/\W+/g, '-')} />
             </div>
             <div className="segments">
               {chunks.map((c, i) => (
                 <button key={i} className={`segment seg-${SEGMENT_COLORS[i % SEGMENT_COLORS.length]} ${i === chunkIdx ? 'on' : ''}`}
-                  disabled={i > unlocked || busy} onClick={() => pickChunk(i)}>
-                  {i > unlocked ? '🔒 ' : i < unlocked ? '✓ ' : ''}{c.label.toUpperCase()}
+                  disabled={busy} onClick={() => pickChunk(i)}>
+                  {passed.has(i) ? '✓ ' : ''}{c.label.toUpperCase()}
                 </button>
               ))}
             </div>
@@ -393,14 +402,14 @@ export default function Practice() {
 
           <div className="step-polaroids">
             {chunks.map((c, i) => (
-              <button key={i} className="polaroid-btn" disabled={i > unlocked || busy} onClick={() => pickChunk(i)}>
+              <button key={i} className="polaroid-btn" disabled={busy} onClick={() => pickChunk(i)}>
                 <Polaroid caption={c.label.toLowerCase()} badge={i + 1} tilt={i % 2 ? 1.5 : -1.5} active={i === chunkIdx}>
                   {hasVideo ? (
                     <video src={`${api.videoUrl(id)}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
                   ) : (
                     <SkeletonPlayer dance={dance} start={c.start} end={c.end} width={160} height={160} color="#ff3ea5" glow={6} lineWidth={5} className="fill" />
                   )}
-                  {i > unlocked && <span className="lock">🔒</span>}
+                  {passed.has(i) && <span className="done-mark">✓</span>}
                 </Polaroid>
                 {i === chunkIdx && <span className="here-sticker">you're here!</span>}
               </button>
@@ -415,12 +424,12 @@ export default function Practice() {
           <span className="tag tag-lilac">STEP {chunkIdx + 1} OF {chunks.length}</span>
           <h3 className="notepad-step">{chunk?.label.toLowerCase()}</h3>
           <p className="notepad-text">
-            {tip ?? `Watch the tutorial, then hit practice. Score ${PASS_SCORE * 100}% to unlock the next step. Your coach will chime in if you get stuck.`}
+            {tip ?? `Watch the tutorial, then hit practice. Hit SUPER (${PASS_SCORE * 100}%+) to complete the step, or jump to any step you like. Your coach will chime in if you get stuck.`}
           </p>
           {result && (
             <div className="last-try" onClick={() => setSheetOpen(true)}>
               <ScoreRing value={result.overall} />
-              <div><b>last try: {Math.round(result.overall * 100)}%</b><span>{result.passed ? 'passed! 🔥' : 'tap for details'}</span></div>
+              <div><b>last try: {ratingFor(result.overall).label} {ratingFor(result.overall).emoji}</b><span>{Math.round(result.overall * 100)}% · {result.passed ? 'step complete!' : 'tap for details'}</span></div>
             </div>
           )}
           <hr />
@@ -442,9 +451,9 @@ export default function Practice() {
               <div className="sheet-head">
                 <ScoreRing value={result.overall} />
                 <div>
-                  <h2>{result.passed ? 'Passed! 🔥' : 'So close!'}</h2>
+                  <h2 style={{ color: ratingFor(result.overall).color }}>{ratingFor(result.overall).label}! {ratingFor(result.overall).emoji}</h2>
                   <p className="muted">
-                    {result.passed ? 'Next step unlocked.' : `${PASS_SCORE * 100}% unlocks the next step`} · {timingLabel(result.timingOffset)}
+                    {result.passed ? 'Step complete!' : `SUPER (${PASS_SCORE * 100}%+) completes this step`} · {timingLabel(result.timingOffset)}
                     {' '}({result.timingOffset >= 0 ? '+' : ''}{result.timingOffset.toFixed(2)}s)
                   </p>
                 </div>
@@ -461,7 +470,7 @@ export default function Practice() {
               </div>
               <div className="row center">
                 <button className="btn-teal" onClick={start}>try again →</button>
-                {result.passed && chunkIdx < chunks.length - 1 && (
+                {chunkIdx < chunks.length - 1 && (
                   <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
                 )}
               </div>

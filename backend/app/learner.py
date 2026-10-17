@@ -17,7 +17,7 @@ BODY_PARTS = {
 }
 
 EMA_OLD, EMA_NEW = 0.7, 0.3
-PASS_SCORE = 0.8
+PASS_SCORE = 0.7  # SUPER or better, matches frontend/src/lib/scoring.js
 DETAIL_THRESHOLD = 0.6
 TIMING_THRESHOLD = 0.15  # seconds
 

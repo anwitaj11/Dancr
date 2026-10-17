@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { angle, computeAngles, isTPose, mirrorAngles, AngleSmoother } from './angles.js'
 import { buildChunks, splitIntoSteps } from './steps.js'
-import { LoopStats, countAt, jointScore, matchWithTiming, sampleAt, scorePose } from './scoring.js'
+import { LoopStats, countAt, jointScore, matchWithTiming, ratingFor, sampleAt, scorePose } from './scoring.js'
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
@@ -39,16 +39,26 @@ describe('angles', () => {
 })
 
 describe('scoring', () => {
-  it('scores joints linearly to 0 at 45°', () => {
+  it('gives full credit within 20° and falls to 0 at 75°', () => {
     expect(jointScore(0)).toBe(1)
-    expect(jointScore(22.5)).toBe(0.5)
+    expect(jointScore(-20)).toBe(1)
+    expect(jointScore(47.5)).toBeCloseTo(0.5)
     expect(jointScore(-90)).toBe(0)
+  })
+
+  it('maps scores to rating tiers', () => {
+    expect(ratingFor(0.9).label).toBe('PERFECT')
+    expect(ratingFor(0.72).label).toBe('SUPER')
+    expect(ratingFor(0.5).label).toBe('GOOD')
+    expect(ratingFor(0.3).label).toBe('OK')
+    expect(ratingFor(0.1).label).toBe('KEEP GOING')
   })
 
   it('averages joint scores', () => {
     const ref = Object.fromEntries(JOINT_NAMES.map((j) => [j, 90]))
-    const user = { ...ref, leftKnee: 135 }
+    const user = { ...ref, leftKnee: 165 }
     expect(scorePose(user, ref).overall).toBeCloseTo(7 / 8)
+    expect(scorePose({ ...ref, leftKnee: 105 }, ref).overall).toBe(1)
   })
 
   it('counts 1–8 from BPM', () => {
@@ -80,7 +90,7 @@ describe('scoring', () => {
     expect(s.overall).toBeCloseTo(0.75)
     expect(s.worstCount).toBe(2)
     expect(s.weakestJoint).toBe('rightKnee')
-    expect(s.passed).toBe(false)
+    expect(s.passed).toBe(true) // 75% is SUPER, which completes a step
   })
 })
 

@@ -1,13 +1,31 @@
 import { JOINT_NAMES } from './joints.js'
 import { mirrorAngles } from './angles.js'
 
-export const PASS_SCORE = 0.8
+// Forgiving scoring, in the spirit of Just Dance / Dance Central: small
+// differences count as perfect, and results are shown as named tiers.
+export const PERFECT_ZONE = 20 // degrees off that still earn full credit
+export const ZERO_AT = 75 // degrees off where a joint earns nothing
+export const RATINGS = [
+  { min: 0.85, label: 'PERFECT', emoji: '🌟', color: '#22c55e' },
+  { min: 0.7, label: 'SUPER', emoji: '🔥', color: '#84cc16' },
+  { min: 0.5, label: 'GOOD', emoji: '👍', color: '#facc15' },
+  { min: 0.25, label: 'OK', emoji: '👌', color: '#fb923c' },
+  { min: 0, label: 'KEEP GOING', emoji: '💪', color: '#ff2d55' },
+]
+export const PASS_SCORE = 0.7 // SUPER or better completes a step
 export const TIMING_WINDOW = 0.5 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
-/** 1 at a perfect match, 0 at 45° off or worse. */
+/** 1 within PERFECT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
 export function jointScore(diff) {
-  return Math.max(0, 1 - Math.abs(diff) / 45)
+  const off = Math.abs(diff)
+  if (off <= PERFECT_ZONE) return 1
+  return Math.max(0, 1 - (off - PERFECT_ZONE) / (ZERO_AT - PERFECT_ZONE))
+}
+
+/** The named tier (PERFECT / SUPER / GOOD / OK / KEEP GOING) for a 0–1 score. */
+export function ratingFor(score) {
+  return RATINGS.find((r) => score >= r.min) ?? RATINGS.at(-1)
 }
 
 export function scorePose(userAngles, refAngles, joints = JOINT_NAMES) {

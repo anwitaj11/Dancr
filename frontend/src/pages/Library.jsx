@@ -68,7 +68,6 @@ export default function Library() {
   const featured = list.find((d) => d.hasVideo) ?? list[0]
   const second = list.find((d) => d !== featured && d.hasVideo) ?? list.find((d) => d !== featured)
   const lastScore = profile?.history?.at(-1)?.avg
-  const unlockHarder = profile?.adaptations?.unlockHarder
 
   return (
     <>
@@ -138,7 +137,6 @@ export default function Library() {
                 <span className="tag tag-pink">{d.steps} {d.steps === 1 ? 'STEP' : 'STEPS'} · {LEVELS[d.difficulty] ?? 'Advanced'}</span>
                 <span className="tag tag-blue">♫ {Math.round(d.bpm)} BPM</span>
                 {!d.hasVideo && <span className="tag tag-ghost">demo figure</span>}
-                {d.difficulty >= 3 && unlockHarder && <span className="tag tag-lime">⚡ unlocked</span>}
               </div>
             </Link>
           ))}
