@@ -96,6 +96,7 @@ def list_dances():
             "difficulty": r["difficulty"], "steps": len(data.get("steps", [])),
             "duration": data["frames"][-1]["t"] if data.get("frames") else 0,
             "hasVideo": _video_path(r["id"]) is not None,
+            "dancer": data.get("dancer"),  # which person the lesson follows, if the video has several
         })
     return out
 

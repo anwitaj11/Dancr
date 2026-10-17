@@ -105,10 +105,10 @@ export function drawBodyOverlay(ctx, pose, jointScores, map, { mode = 'full', wi
   ctx.restore()
 }
 
-/** Where a video sits inside its element with object-fit: contain (in element pixels). */
-export function containRect(boxW, boxH, videoW, videoH) {
+/** Where a video sits inside its element with object-fit: contain (or cover), in element pixels. */
+export function containRect(boxW, boxH, videoW, videoH, cover = false) {
   if (!videoW || !videoH) return { x: 0, y: 0, w: boxW, h: boxH }
-  const scale = Math.min(boxW / videoW, boxH / videoH)
+  const scale = (cover ? Math.max : Math.min)(boxW / videoW, boxH / videoH)
   const w = videoW * scale, h = videoH * scale
   return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h }
 }

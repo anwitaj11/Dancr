@@ -9,6 +9,7 @@ import Practice from './pages/Practice.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Remix from './pages/Remix.jsx'
 import EditSteps from './pages/EditSteps.jsx'
+import ChooseDancer from './pages/ChooseDancer.jsx'
 import VoiceCoach from './components/VoiceCoach.jsx'
 import { CoachContextProvider } from './lib/coachContext.jsx'
 
@@ -45,6 +46,7 @@ function Shell() {
           <Route path="/practice/:id" element={<Practice />} />
           <Route path="/remix/:id" element={<Remix />} />
           <Route path="/steps/:id" element={<EditSteps />} />
+          <Route path="/dancer/:id" element={<ChooseDancer />} />
           <Route path="/profile" element={<Dashboard />} />
           <Route path="/dashboard" element={<Navigate to="/profile" replace />} />
         </Routes>

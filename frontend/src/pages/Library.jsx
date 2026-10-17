@@ -4,19 +4,24 @@ import { api, currentUser } from '../lib/api.js'
 import { pct } from '../lib/scoring.js'
 import { useCoachSummary } from '../lib/coachContext.jsx'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
+import MarkedVideo from '../components/MarkedVideo.jsx'
 import { APP_NAME, Headline, Marquee, Polaroid, Sticker, Win } from '../components/Retro.jsx'
 
 const FIGURE_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#7b3dff', '#00b3a4']
 const LEVELS = ['Beginner', 'Beginner', 'Intermediate', 'Advanced']
 const TILTS = [-2, 1.5, -1, 2, -1.5, 1]
 
-/** Stick-figure data, fetched only for dances that have no real video yet. */
+/**
+ * Full dance data, fetched only when the card needs it: stick-figure dances with
+ * no real video yet, and videos with several people (to tag who to copy).
+ */
 function useDance(summary) {
   const [dance, setDance] = useState(null)
+  const needed = summary && (!summary.hasVideo || summary.dancer)
   useEffect(() => {
-    if (!summary || summary.hasVideo) return
+    if (!needed) return
     api.getDance(summary.id).then((d) => setDance(d.data)).catch(() => {})
-  }, [summary?.id, summary?.hasVideo])
+  }, [summary?.id, needed]) // eslint-disable-line react-hooks/exhaustive-deps
   return dance
 }
 
@@ -24,6 +29,9 @@ function useDance(summary) {
 function DancePreview({ summary, i = 0, small = false }) {
   const dance = useDance(summary)
   if (!summary) return <div className="preview-empty">✦</div>
+  if (summary.hasVideo && summary.dancer && dance?.dancer) {
+    return <MarkedVideo src={api.videoUrl(summary.id)} dance={dance} small={small} />
+  }
   if (summary.hasVideo) {
     return <video src={api.videoUrl(summary.id)} className="fill cover" autoPlay loop muted playsInline preload="metadata" />
   }
@@ -171,6 +179,12 @@ export default function Library() {
                 <span className="tag tag-pink">{d.steps} {d.steps === 1 ? 'STEP' : 'STEPS'} · {LEVELS[d.difficulty] ?? 'Advanced'}</span>
                 <span className="tag tag-blue">♫ {Math.round(d.bpm)} BPM</span>
                 {!d.hasVideo && <span className="tag tag-ghost">demo figure</span>}
+                {d.dancer && (
+                  <span className="tag dancer-chip" style={{ background: d.dancer.color }}>👤 DANCER {d.dancer.number} OF {d.dancer.people}</span>
+                )}
+                {d.hasVideo && (
+                  <Link to={`/dancer/${d.id}`} className="link-btn">👥 {d.dancer ? 'change dancer' : 'choose dancer'}</Link>
+                )}
                 <button type="button" className="link-btn remove-btn" disabled={removing} aria-label={`Remove ${d.name}`}
                   onClick={() => remove([d.id], `Remove "${d.name}" from the library (and its practice history)?`)}>
                   🗑 remove

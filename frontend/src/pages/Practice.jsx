@@ -493,6 +493,12 @@ export default function Practice() {
                     color="#ff3ea5" highlight={drillOn ? drill?.joint : undefined} className="fill" />
                 )}
                 <span className="step-flag">STEP {chunkIdx + 1}</span>
+                {hasVideo && (
+                  <Link to={`/dancer/${id}`} className="dancer-flag" title="Choose which person in the video to learn from"
+                    style={dance.dancer ? { background: dance.dancer.color } : undefined}>
+                    {dance.dancer ? `👤 DANCER ${dance.dancer.number} · change` : '👥 choose dancer'}
+                  </Link>
+                )}
                 <span className="half-note">watch the arms! ↖</span>
               </div>
 
@@ -611,6 +617,7 @@ export default function Practice() {
           </button>
           <span className="script pink center">you've totally got this ♡</span>
           <Link to={`/steps/${id}`} className="edit-steps-link">✂ split the steps differently</Link>
+          {hasVideo && <Link to={`/dancer/${id}`} className="edit-steps-link">👥 choose a different dancer</Link>}
         </Win>
       </div>
 
