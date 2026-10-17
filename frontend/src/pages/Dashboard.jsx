@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, currentUser } from '../lib/api.js'
-import { colorFor } from '../lib/scoring.js'
+import { colorFor, ratingFor } from '../lib/scoring.js'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
 
 const PART_ICONS = { arms: '💪', torso: '🧍', legs: '🦵' }
@@ -22,7 +22,7 @@ function ProgressChart({ history }) {
       <polyline points={points} fill="none" stroke="url(#line)" strokeWidth="3" strokeLinejoin="round" />
       {history.map((d, i) => (
         <g key={d.date}>
-          <circle cx={x(i)} cy={y(d.avg)} r="6" fill="#ff3ea5" stroke="#1d1030" strokeWidth="2"><title>{`${d.date}: ${Math.round(d.avg * 100)}%`}</title></circle>
+          <circle cx={x(i)} cy={y(d.avg)} r="6" fill="#ff3ea5" stroke="#1d1030" strokeWidth="2"><title>{`${d.date}: ${ratingFor(d.avg).label}`}</title></circle>
           <text x={x(i)} y={h - 4} textAnchor="middle">{d.date.slice(5)}</text>
         </g>
       ))}
@@ -84,7 +84,7 @@ export default function Dashboard() {
                 <span className="skill-icon">{PART_ICONS[part]}</span>
                 <span className="skill-name">{part}</span>
                 <div className="bar chunky"><div style={{ width: `${v * 100}%`, background: colorFor(v) }} /></div>
-                <b>{Math.round(v * 100)}%</b>
+                <b className="skill-rating">{ratingFor(v).emoji} {ratingFor(v).label}</b>
               </div>
             ))}
           </Win>

@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import { AngleSmoother, bodyInFrame, computeAngles } from '../lib/angles.js'
 import { BODY_PARTS, JOINT_NAMES, LABELS, P } from '../lib/joints.js'
-import { LoopStats, PASS_SCORE, colorFor, countAt, matchWithTiming, ratingFor, timingLabel } from '../lib/scoring.js'
+import { LoopStats, colorFor, countAt, matchWithTiming, ratingFor, timingLabel } from '../lib/scoring.js'
 import { buildChunks } from '../lib/steps.js'
 import { click, say } from '../lib/voice.js'
 import { useWebcamPose } from '../hooks/useWebcamPose.js'
@@ -22,6 +22,24 @@ const LEVELS = ['Beginner', 'Beginner', 'Intermediate', 'Advanced']
 const SEGMENT_COLORS = ['pink', 'cyan', 'yellow', 'pink', 'cyan', 'yellow']
 const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 const SKELETON_KEY = 'dablab.skeleton'
+const PREVIEW_KEY = 'dablab.preview'
+
+/** Watch the step once before dancing it (on unless turned off). */
+function loadPreviewPref() {
+  try {
+    return localStorage.getItem(PREVIEW_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+function savePreviewPref(on) {
+  try {
+    localStorage.setItem(PREVIEW_KEY, on ? 'on' : 'off')
+  } catch {
+    // storage blocked: the choice lasts for this visit only
+  }
+}
 
 function loadSkeletonPref() {
   try {
@@ -56,7 +74,7 @@ function ScoreRing({ value }) {
         <circle cx="32" cy="32" r={r} className="track" />
         <circle cx="32" cy="32" r={r} className="fill" strokeDasharray={`${value * c} ${c}`} />
       </svg>
-      <span>{Math.round(value * 100)}</span>
+      <span aria-label={ratingFor(value).label}>{ratingFor(value).emoji}</span>
     </div>
   )
 }
@@ -74,6 +92,7 @@ export default function Practice() {
   const [loop, setLoop] = useState(true)
   const [drillOn, setDrillOn] = useState(false)
   const [skeletonOn, setSkeletonOn] = useState(loadSkeletonPref)
+  const [previewFirst, setPreviewFirst] = useState(loadPreviewPref)
   const [hasVideo, setHasVideo] = useState(false)
   const [difficulty, setDifficulty] = useState(1)
   const [phase, setPhase] = useState('idle') // idle | countin | dancing | results
@@ -112,12 +131,13 @@ export default function Practice() {
   const drill = adapt?.drill
   const scoredJoints = drillOn && drill ? BODY_PARTS[drill.part] : JOINT_NAMES
   const loud = adapt?.rhythmMode
-  const busy = phase === 'dancing' || phase === 'countin'
+  const busy = phase === 'dancing' || phase === 'countin' || phase === 'preview'
 
   const refTime = useCallback(() => {
     const c = clock.current
     if (!chunk) return 0
-    if (c.phase !== 'dancing') return chunk.start
+    // The clock runs while watching the preview and while dancing.
+    if (c.phase !== 'dancing' && c.phase !== 'preview') return chunk.start
     return chunk.start + ((performance.now() - c.t0) / 1000) * speed
   }, [chunk, speed])
 
@@ -135,14 +155,7 @@ export default function Practice() {
     setClockPhase('idle')
   }
 
-  function start() {
-    if (!chunk) return
-    // The last loop's results stay available until this loop finishes.
-    setCelebrate(null)
-    setSheetOpen(false)
-    stats.current = new LoopStats()
-    smoother.current.reset()
-    lastCount.current = null
+  function beginCountIn() {
     setClockPhase('countin')
     const beatMs = (60 / (dance.bpm * speed)) * 1000
     say('5, 6, 7, 8!', { volume: loud ? 1 : 0.8 })
@@ -154,6 +167,30 @@ export default function Practice() {
       clock.current.t0 = performance.now()
       setClockPhase('dancing')
     }, COUNT_IN_BEATS * beatMs)
+  }
+
+  /** Watch-first preview (unless turned off), then the count-in, then dance. */
+  function start({ withPreview = previewFirst } = {}) {
+    if (!chunk) return
+    // The last loop's results stay available until this loop finishes.
+    setCelebrate(null)
+    setSheetOpen(false)
+    stats.current = new LoopStats()
+    smoother.current.reset()
+    lastCount.current = null
+    if (withPreview) {
+      clock.current.t0 = performance.now()
+      setClockPhase('preview')
+      later(beginCountIn, ((chunk.end - chunk.start) / speed) * 1000)
+    } else {
+      beginCountIn()
+    }
+  }
+
+  function skipPreview() {
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    beginCountIn()
   }
 
   function pickChunk(i) {
@@ -200,7 +237,7 @@ export default function Practice() {
       } catch {
         setTip(null)
       }
-      if (loop) later(start, 4000)
+      if (loop) later(() => start({ withPreview: false }), 4000)
     }
   }
 
@@ -256,7 +293,7 @@ export default function Practice() {
       // Burn the score into the frame so it shows up in Vine recordings.
       ctx.font = `900 ${Math.round(canvas.height / 14)}px 'DM Sans', system-ui`
       const rating = ratingFor(match.overall)
-      const label = `${rating.label} ${Math.round(match.overall * 100)}%`
+      const label = `${rating.label}!`
       ctx.fillStyle = rating.color
       ctx.strokeStyle = '#1d1030'
       ctx.lineWidth = Math.max(3, canvas.height / 160)
@@ -270,7 +307,7 @@ export default function Practice() {
     ctx.fillStyle = '#ffffffdd'
     ctx.fillText(APP_NAME, canvas.width - ctx.measureText(APP_NAME).width - 14, 34)
 
-    if (dancing) {
+    if (clock.current.phase === 'preview' || dancing) {
       const t = refTime()
       if (progressRef.current) {
         progressRef.current.style.width = `${Math.min(100, ((t - chunk.start) / (chunk.end - chunk.start)) * 100)}%`
@@ -278,6 +315,9 @@ export default function Practice() {
       if (timeRef.current) {
         timeRef.current.textContent = `${fmtTime(Math.max(0, t - chunk.start))} / ${fmtTime(chunk.end - chunk.start)}`
       }
+    }
+    if (dancing) {
+      const t = refTime()
       const count = countAt(t, dance.bpm, dance.countStart)
       if (count !== lastCount.current) {
         lastCount.current = count
@@ -329,12 +369,12 @@ export default function Practice() {
 
       <div className="practice-grid">
         <div className="player-col">
-          <Win title={`STEP_SYNC_PLAYER_v4.16 · ${chunk?.label ?? ''}`} extra={<span className="win-res">LIVE ●</span>} className="player-win">
+          <Win title={`DANCR_PLAYER_v4.16 · ${chunk?.label ?? ''}`} extra={<span className="win-res">LIVE ●</span>} className="player-win">
             <div className="duet">
               <div className="duet-half tutorial">
                 {hasVideo ? (
                   <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
-                    speed={speed} playing={phase === 'dancing'} mirror={mirror} className="fill" />
+                    speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror} className="fill" />
                 ) : (
                   <SkeletonPlayer dance={dance} getTime={refTime} mirror={mirror} width={360} height={480}
                     color="#ff3ea5" highlight={drillOn ? drill?.joint : undefined} className="fill" />
@@ -367,6 +407,14 @@ export default function Practice() {
                     </div>
                   </>
                 )}
+                {phase === 'preview' && (
+                  <div className="preview-banner">
+                    <span className="preview-eyes">👀</span>
+                    <b>WATCH FIRST</b>
+                    <span>{chunk?.label}: copy along on the left, then it's your turn</span>
+                    <button type="button" className="btn-bracket small-btn" onClick={skipPreview}>[ SKIP ⏭ ]</button>
+                  </div>
+                )}
                 {countIn && <div className="countin" key={countIn}>{countIn}</div>}
                 {outOfFrame && phase !== 'idle' && <div className="frame-warn">Step back so your whole body is in the frame</div>}
                 {status === 'starting' && <div className="cam-status"><div className="spinner" /> Starting camera…</div>}
@@ -375,7 +423,7 @@ export default function Practice() {
             </div>
 
             <div className="player-controls">
-              <button className={`round-btn play ${busy ? 'live' : ''}`} onClick={busy ? stop : start} disabled={!chunk}
+              <button className={`round-btn play ${busy ? 'live' : ''}`} onClick={busy ? stop : () => start()} disabled={!chunk}
                 aria-label={busy ? 'Stop' : 'Start dancing'}>{busy ? '■' : '▶'}</button>
               <div className="scrub"><span className="scrub-fill" ref={progressRef} /></div>
               <span className="scrub-time" ref={timeRef}>00:00 / {fmtTime(chunk ? chunk.end - chunk.start : 0)}</span>
@@ -383,6 +431,8 @@ export default function Practice() {
             </div>
             <div className="control-rail">
               <SpeedPicker speed={speed} onChange={setSpeed} disabled={busy} />
+              <RailButton icon="👀" label="Preview" active={previewFirst}
+                onClick={() => setPreviewFirst((on) => { savePreviewPref(!on); return !on })} />
               <RailButton icon="🪞" label="Mirror" active={mirror} onClick={() => setMirror((m) => !m)} />
               <RailButton icon="🔁" label="Loop" active={loop} onClick={() => setLoop((l) => !l)} />
               {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
@@ -424,22 +474,23 @@ export default function Practice() {
           <span className="tag tag-lilac">STEP {chunkIdx + 1} OF {chunks.length}</span>
           <h3 className="notepad-step">{chunk?.label.toLowerCase()}</h3>
           <p className="notepad-text">
-            {tip ?? `Watch the tutorial, then hit practice. Hit SUPER (${PASS_SCORE * 100}%+) to complete the step, or jump to any step you like. Your coach will chime in if you get stuck.`}
+            {tip ?? `Watch the tutorial, then hit practice. Hit SUPER or better to complete the step, or jump to any step you like. Your coach will chime in if you get stuck.`}
           </p>
           {result && (
             <div className="last-try" onClick={() => setSheetOpen(true)}>
               <ScoreRing value={result.overall} />
-              <div><b>last try: {ratingFor(result.overall).label} {ratingFor(result.overall).emoji}</b><span>{Math.round(result.overall * 100)}% · {result.passed ? 'step complete!' : 'tap for details'}</span></div>
+              <div><b>last try: {ratingFor(result.overall).label} {ratingFor(result.overall).emoji}</b><span>{result.passed ? 'step complete!' : 'tap for details'}</span></div>
             </div>
           )}
           <hr />
           <ol className="pointers">
             {pointers.slice(0, 3).map((t, i) => <li key={i}><span>{String(i + 1).padStart(2, '0')}</span>{t}</li>)}
           </ol>
-          <button className="btn-teal wide" onClick={busy ? stop : start} disabled={!chunk}>
+          <button className="btn-teal wide" onClick={busy ? stop : () => start()} disabled={!chunk}>
             {busy ? 'stop ■' : phase === 'results' ? 'practice it again →' : 'practice this move →'}
           </button>
           <span className="script pink center">you've totally got this ♡</span>
+          <Link to={`/steps/${id}`} className="edit-steps-link">✂ split the steps differently</Link>
         </Win>
       </div>
 
@@ -453,7 +504,7 @@ export default function Practice() {
                 <div>
                   <h2 style={{ color: ratingFor(result.overall).color }}>{ratingFor(result.overall).label}! {ratingFor(result.overall).emoji}</h2>
                   <p className="muted">
-                    {result.passed ? 'Step complete!' : `SUPER (${PASS_SCORE * 100}%+) completes this step`} · {timingLabel(result.timingOffset)}
+                    {result.passed ? 'Step complete!' : 'SUPER or better completes this step'} · {timingLabel(result.timingOffset)}
                     {' '}({result.timingOffset >= 0 ? '+' : ''}{result.timingOffset.toFixed(2)}s)
                   </p>
                 </div>
@@ -464,12 +515,11 @@ export default function Practice() {
                   <div key={j} className="joint-row">
                     <span>{LABELS[j]}</span>
                     <div className="bar"><div style={{ width: `${s * 100}%`, background: colorFor(s) }} /></div>
-                    <b>{Math.round(s * 100)}</b>
                   </div>
                 ))}
               </div>
               <div className="row center">
-                <button className="btn-teal" onClick={start}>try again →</button>
+                <button className="btn-teal" onClick={() => start()}>try again →</button>
                 {chunkIdx < chunks.length - 1 && (
                   <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
                 )}

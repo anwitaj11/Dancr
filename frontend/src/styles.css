@@ -1,4 +1,4 @@
-/* StepSync: 2016 internet-maximalist. Hard ink outlines, offset shadows,
+/* Dancr: 2016 internet-maximalist. Hard ink outlines, offset shadows,
    sunset gradients, retro OS windows, stickers and polaroids. */
 :root {
   --ink: #1d1030;
@@ -384,7 +384,7 @@ main.immersive { padding: 0; }
 .sheet-head p { margin: 2px 0 0; font-size: 0.85rem; }
 .coach-bubble { display: flex; gap: 10px; margin: 0 0 14px; padding: 12px 14px; background: var(--yellow); border: 2px solid var(--ink); border-radius: 18px 18px 18px 4px; font-weight: 700; }
 .joint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin-bottom: 18px; }
-.joint-row { display: grid; grid-template-columns: 84px 1fr 28px; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 500; }
+.joint-row { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 500; }
 .joint-row b { text-align: right; }
 .bar { height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
 .bar > div { height: 100%; transition: width 0.3s; }
@@ -400,6 +400,40 @@ main.immersive { padding: 0; }
 .vine-result { display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .vine-result video { max-height: 70dvh; max-width: 100%; border: 4px solid #00bf8f; box-shadow: var(--shadow); }
 .vine-result .btn, .vine-result .btn.ghost { padding: 12px 22px; border: var(--border); box-shadow: var(--shadow-sm); background: var(--yellow); font-weight: 900; cursor: pointer; }
+
+/* watch-first preview */
+.preview-banner {
+  position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 20px; text-align: center; background: #1d1030d9; color: #fff;
+}
+.preview-banner b { font-family: var(--display); font-weight: 400; font-size: clamp(1.8rem, 4vw, 3rem); color: var(--yellow); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; }
+.preview-eyes { font-size: 3rem; animation: hop 0.8s infinite alternate ease-in-out; }
+.small-btn { padding: 10px 16px; font-size: 0.85rem; }
+.edit-steps-link { align-self: center; font-family: var(--mono); font-weight: 700; font-size: 0.8rem; color: var(--blue); text-decoration: underline; }
+
+/* step editor */
+.step-editor { display: flex; flex-direction: column; gap: 14px; margin: 16px 0; }
+.step-editor-view { display: flex; justify-content: center; background: #120a22; border: var(--border); }
+.step-video { width: 100%; max-height: 420px; background: #000; }
+.step-figure { position: relative; width: 100%; max-width: 320px; aspect-ratio: 3 / 4; }
+.step-timeline { position: relative; height: 46px; border: var(--border); background: #fff; cursor: pointer; overflow: hidden; }
+.step-block {
+  position: absolute; top: 0; bottom: 0; display: grid; place-items: center; border-right: 3px solid var(--ink);
+  font-family: var(--serif); font-weight: 900; font-size: 1.1rem;
+}
+.playhead { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; background: var(--ink); box-shadow: 0 0 0 2px #fff; pointer-events: none; }
+.step-scrub { width: 100%; accent-color: var(--hot); }
+.step-actions { gap: 12px; }
+.step-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.step-list li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; background: #fff; border: 2px solid var(--ink); }
+.step-list li.current { box-shadow: inset 6px 0 0 var(--hot); }
+.step-dot { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--ink); font-weight: 900; }
+.step-name { flex: 1; min-width: 140px; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 8px; font: inherit; font-weight: 700; }
+.step-time { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 0.75rem; }
+.step-time input { width: 84px; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 8px; font: inherit; }
+.step-len { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 52px; }
+.link-btn { background: none; border: none; cursor: pointer; font-family: var(--mono); font-weight: 700; font-size: 0.78rem; color: var(--blue); padding: 4px; }
+.link-btn:hover { text-decoration: underline; }
 
 /* ---------- calibration ---------- */
 .calibrate { position: relative; height: 100dvh; background: #000; }
@@ -434,7 +468,7 @@ main.immersive { padding: 0; }
 .profile-stats { display: grid; grid-template-columns: repeat(3, 1fr); background: #fff; border: 2px solid var(--ink); text-align: center; padding: 8px 0; }
 .profile-stats div { display: flex; flex-direction: column; }
 .profile-stats b { font-family: var(--serif); font-weight: 900; font-size: 1.4rem; }
-.skill-row { display: grid; grid-template-columns: 30px 70px 1fr 50px; gap: 12px; align-items: center; margin: 12px 0; text-transform: capitalize; font-weight: 700; }
+.skill-row { display: grid; grid-template-columns: 30px 70px 1fr 150px; gap: 12px; align-items: center; margin: 12px 0; text-transform: capitalize; font-weight: 700; }
 .skill-row b { text-align: right; }
 .skill-icon { font-size: 1.4rem; }
 .chart { width: 100%; }

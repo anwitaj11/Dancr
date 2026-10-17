@@ -1,13 +1,13 @@
-// Small building blocks for the StepSync look: retro OS windows, stickers,
+// Small building blocks for the Dancr look: retro OS windows, stickers,
 // polaroids and a scrolling ticker.
 
-export const APP_NAME = 'StepSync'
+export const APP_NAME = 'Dancr'
 
 export function Logo() {
   return (
     <span className="logo">
       <span className="logo-star" aria-hidden="true">✦</span>
-      <span>Step<em>Sync</em></span>
+      <span>Danc<em>r</em></span>
     </span>
   )
 }

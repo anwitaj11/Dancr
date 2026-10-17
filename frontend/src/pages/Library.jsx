@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
+import { ratingFor } from '../lib/scoring.js'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
 import { APP_NAME, Headline, Marquee, Polaroid, Sticker, Win } from '../components/Retro.jsx'
 
@@ -101,7 +102,7 @@ export default function Library() {
             </div>
           )}
           <div className="speech">omg you're getting it!! ♡</div>
-          <div className="match-pill">{lastScore != null ? `${Math.round(lastScore * 100)}% MATCH!` : 'READY TO MATCH?'}</div>
+          <div className="match-pill">{lastScore != null ? `${ratingFor(lastScore).label}! ${ratingFor(lastScore).emoji}` : 'READY TO MATCH?'}</div>
           <div className="msg-box"><b>NEW MESSAGE (1)</b><span>ur dance coach is ready!!!</span></div>
           {second && (
             <Link to={`/practice/${second.id}`} className="hero-polaroid">

@@ -8,6 +8,7 @@ import Calibrate from './pages/Calibrate.jsx'
 import Practice from './pages/Practice.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Remix from './pages/Remix.jsx'
+import EditSteps from './pages/EditSteps.jsx'
 
 function Shell() {
   const [user, setUser] = useState(currentUser())
@@ -41,6 +42,7 @@ function Shell() {
           <Route path="/calibrate" element={<Calibrate />} />
           <Route path="/practice/:id" element={<Practice />} />
           <Route path="/remix/:id" element={<Remix />} />
+          <Route path="/steps/:id" element={<EditSteps />} />
           <Route path="/profile" element={<Dashboard />} />
           <Route path="/dashboard" element={<Navigate to="/profile" replace />} />
         </Routes>

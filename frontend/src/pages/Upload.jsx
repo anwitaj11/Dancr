@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { buildDance } from '../lib/dance.js'
 import { processVideoFile } from '../lib/processVideo.js'
-import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
-import { Headline, Polaroid, Sticker, Win } from '../components/Retro.jsx'
+import StepEditor from '../components/StepEditor.jsx'
+import { Headline, Sticker, Win } from '../components/Retro.jsx'
 
 export default function Upload() {
   const navigate = useNavigate()
@@ -21,6 +21,10 @@ export default function Upload() {
   const [dance, setDance] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  // Local preview of the chosen file, for the step editor.
+  const fileUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file])
+  useEffect(() => () => fileUrl && URL.revokeObjectURL(fileUrl), [fileUrl])
+  const setSteps = useCallback((steps) => setDance((d) => (d ? { ...d, steps } : d)), [])
   const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
@@ -133,20 +137,16 @@ export default function Upload() {
       </Win>
 
       {dance && (
-        <Win title="LESSON_PREVIEW.exe" color="pink" className="upload-win">
-          <div className="lesson-preview">
-            <Polaroid caption={dance.name} tilt={-2}><SkeletonPlayer dance={dance} className="fill" /></Polaroid>
-            <div>
-              <h2 className="section-title small">{dance.name}</h2>
-              <p className="muted">{dance.frames.length} frames · {dance.steps.length} steps of 8 counts</p>
-              <ol className="steps">
-                {dance.steps.map((s) => <li key={s.index}>{s.label}: {s.start.toFixed(2)}s – {s.end.toFixed(2)}s</li>)}
-              </ol>
-              <button className="btn-teal wide" onClick={save} disabled={saving}>
-                {saving ? 'saving…' : replacing ? `replace ${replacing.name} & practice →` : 'save & practice →'}
-              </button>
-            </div>
-          </div>
+        <Win title="STEP_SPLITTER.exe" color="pink" className="upload-win">
+          <h2 className="section-title small">{dance.name}</h2>
+          <p className="muted">
+            We split it into {dance.steps.length} {dance.steps.length === 1 ? 'step' : 'steps'} automatically
+            (8 counts each). Happy with that? Save it. Want different steps? Edit them below.
+          </p>
+          <StepEditor key={dance.frames.length} dance={dance} videoSrc={fileUrl} onChange={setSteps} />
+          <button className="btn-teal wide" onClick={save} disabled={saving}>
+            {saving ? 'saving…' : replacing ? `replace ${replacing.name} & practice →` : 'save & practice →'}
+          </button>
         </Win>
       )}
     </section>

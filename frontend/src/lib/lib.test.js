@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { angle, computeAngles, isTPose, mirrorAngles, AngleSmoother } from './angles.js'
-import { buildChunks, splitIntoSteps } from './steps.js'
+import { buildChunks, fromCuts, mergeWithNext, moveCut, splitAt, splitIntoSteps, toCuts } from './steps.js'
 import { LoopStats, countAt, jointScore, matchWithTiming, ratingFor, sampleAt, scorePose } from './scoring.js'
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
@@ -130,5 +130,36 @@ describe('remix', () => {
       expect(r.steps).toHaveLength(dance.steps.length)
       expect(Object.values(r.frames[10].angles).every(Number.isFinite)).toBe(true)
     }
+  })
+})
+
+describe('manual step editing', () => {
+  const steps = splitIntoSteps(16, 120) // 4 steps of 4s
+  const { cuts, labels } = toCuts(steps)
+
+  it('round-trips steps through cuts', () => {
+    expect(cuts).toEqual([0, 4, 8, 12, 16])
+    expect(fromCuts(cuts, labels, 120)).toEqual(steps)
+  })
+
+  it('splits a step and renumbers default labels', () => {
+    const r = splitAt(cuts, labels, 2)
+    expect(r.cuts).toEqual([0, 2, 4, 8, 12, 16])
+    expect(r.labels).toEqual(['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5'])
+    expect(fromCuts(r.cuts, r.labels, 120)[0].counts).toBe(4)
+    expect(splitAt(cuts, labels, 4.1)).toBeNull() // too close to an existing cut
+  })
+
+  it('merges steps and keeps custom names', () => {
+    const r = mergeWithNext(cuts, ['Intro', 'Step 2', 'Step 3', 'Step 4'], 1)
+    expect(r.cuts).toEqual([0, 4, 12, 16])
+    expect(r.labels).toEqual(['Intro', 'Step 2', 'Step 3'])
+    expect(mergeWithNext(cuts, labels, 3)).toBeNull()
+  })
+
+  it('moves a boundary but never past its neighbours', () => {
+    expect(moveCut(cuts, 1, 5)).toEqual([0, 5, 8, 12, 16])
+    expect(moveCut(cuts, 1, 100)).toEqual([0, 7.5, 8, 12, 16])
+    expect(moveCut(cuts, 0, 3)).toBe(cuts)
   })
 })

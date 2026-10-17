@@ -18,6 +18,12 @@ BODY_PARTS = {
 
 EMA_OLD, EMA_NEW = 0.7, 0.3
 PASS_SCORE = 0.7  # SUPER or better, matches frontend/src/lib/scoring.js
+# Rating tiers shown to dancers instead of numbers (same as RATINGS in scoring.js).
+RATINGS = [(0.85, "PERFECT"), (0.7, "SUPER"), (0.5, "GOOD"), (0.25, "OK"), (0.0, "KEEP GOING")]
+
+
+def rating(score: float) -> str:
+    return next(label for floor, label in RATINGS if score >= floor)
 DETAIL_THRESHOLD = 0.6
 TIMING_THRESHOLD = 0.15  # seconds
 
@@ -75,7 +81,7 @@ def detect_patterns(attempts: list[dict], skills: dict) -> list[dict]:
             joints = skills.get("joints", {})
             weakest_joint = min(BODY_PARTS[weakest], key=lambda j: joints.get(j, 1))
             patterns.append({"id": "details", "emoji": "🎯", "label": "Needs Detail Work",
-                             "detail": f"{weakest} at {parts[weakest]:.0%}",
+                             "detail": f"{weakest} rated {rating(parts[weakest])}",
                              "part": weakest, "joint": weakest_joint})
 
     recent = attempts[-5:]

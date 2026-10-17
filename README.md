@@ -1,4 +1,4 @@
-# ✦ StepSync
+# ✦ Dancr
 
 An AI dance coach that teaches you 2016's dances through your webcam, watches
 how you move, works out how you learn, and adapts each lesson to you.
