@@ -6,8 +6,10 @@ const DRIFT = 0.15 // seconds before we hard-seek back into sync
  * The original reference video, kept in sync with the practice clock.
  * getTime() returns dance time; offset maps it to video time (frames are
  * re-based to the first detected pose when a dance is processed).
+ * With muted={false} the clip's own music plays along; the browser keeps the
+ * pitch natural at slower speeds.
  */
-export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, className }) {
+export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, muted = true, volume = 1, className }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -29,8 +31,15 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
     return () => cancelAnimationFrame(raf)
   }, [getTime, offset, speed, playing])
 
+  useEffect(() => {
+    const video = ref.current
+    video.muted = muted
+    video.volume = Math.min(1, Math.max(0, volume))
+    video.preservesPitch = true
+  }, [muted, volume])
+
   return (
-    <video ref={ref} src={src} muted playsInline preload="auto" className={className}
+    <video ref={ref} src={src} muted={muted} playsInline preload="auto" className={className}
       style={mirror ? { transform: 'scaleX(-1)' } : undefined} />
   )
 }

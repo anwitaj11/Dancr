@@ -4,7 +4,8 @@ An AI dance coach that teaches you 2016's dances through your webcam, watches
 how you move, works out how you learn, and adapts each lesson to you.
 
 - **Body tracking**: MediaPipe Pose runs in the browser. The video never leaves the device.
-- **Scoring**: compares 12 full-body angles (arms, hips, knees, feet, leg spread, torso lean) to the reference, so it works for any body size. Joints the camera can't see are skipped, not counted wrong. Scores show as a match percentage; 70%+ completes a step.
+- **Scoring**: compares 12 full-body angles (arms, hips, knees, feet, leg spread, torso lean) to the reference, so it works for any body size. Joints the camera can't see are skipped, not counted wrong. In each step the joints that move most count most, and standing still while the tutorial dances scores low. Scores show as a match percentage; 70%+ completes a step.
+- **Practice audio**: the uploaded video's own music plays along (it ducks under spoken lines), the count-in is beat-accurate, and an ElevenLabs voice gives a fix or some encouragement every half bar.
 - **Learning tracker**: every attempt updates a skill score per body part and detects your learning patterns.
 - **AI coach**: Claude writes the tips and session reports, and ElevenLabs speaks them.
 

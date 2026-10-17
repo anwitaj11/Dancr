@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { angle, computeAngles, isTPose, mirrorAngles, AngleSmoother } from './angles.js'
 import { buildChunks, fromCuts, mergeWithNext, moveCut, splitAt, splitIntoSteps, toCuts } from './steps.js'
-import { LoopStats, countAt, jointScore, matchWithTiming, pct, sampleAt, scorePose } from './scoring.js'
+import { LoopStats, MotionMeter, countAt, jointScore, jointWeights, matchWithTiming, pct, sampleAt, scorePose, withMotion } from './scoring.js'
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
+import { ALL_CUES, ENCOURAGEMENT, averageWindow, pickCue } from './cues.js'
 import { pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer } from './people.js'
 
 describe('angles', () => {
@@ -40,10 +41,10 @@ describe('angles', () => {
 })
 
 describe('scoring', () => {
-  it('gives full credit within 20° and falls to 0 at 75°', () => {
+  it('gives full credit within 15° and falls to 0 at 60°', () => {
     expect(jointScore(0)).toBe(1)
-    expect(jointScore(-20)).toBe(1)
-    expect(jointScore(47.5)).toBeCloseTo(0.5)
+    expect(jointScore(-15)).toBe(1)
+    expect(jointScore(37.5)).toBeCloseTo(0.5)
     expect(jointScore(-90)).toBe(0)
   })
 
@@ -262,5 +263,69 @@ describe('full-body angles', () => {
     stats.add({ count: 1, joints: { leftKnee: 1, leftAnkle: 0.5 }, overall: 0.75, offset: 0 })
     stats.add({ count: 2, joints: { leftKnee: 0.6 }, overall: 0.6, offset: 0 })
     expect(stats.summary().joints).toEqual({ leftKnee: 0.8, leftAnkle: 0.5 })
+  })
+})
+
+describe('spoken cues', () => {
+  it('names the fix for the worst joint, in the right direction', () => {
+    const w = { joints: { leftShoulder: 0.2, rightKnee: 0.9 }, diffs: { leftShoulder: -40, rightKnee: 5 }, overall: 0.5 }
+    expect(pickCue(w)).toBe('Lift your left arm higher')
+    expect(pickCue({ ...w, diffs: { ...w.diffs, leftShoulder: 40 } })).toBe('Bring your left arm down')
+    expect(pickCue({ joints: { rightKnee: 0.1 }, diffs: { rightKnee: -50 }, overall: 0.1 })).toBe('Straighten your right leg')
+  })
+
+  it('encourages when the dancer matches, without repeating itself', () => {
+    const w = { joints: { leftKnee: 0.95 }, diffs: { leftKnee: 3 }, overall: 0.9 }
+    const first = pickCue(w, null, () => 0)
+    expect(ENCOURAGEMENT).toContain(first)
+    expect(pickCue(w, first, () => 0)).not.toBe(first)
+    expect(pickCue({ joints: { leftKnee: 0.55 }, diffs: { leftKnee: 30 }, overall: 0.55 })).toBeNull()
+  })
+
+  it('averages a window of frames', () => {
+    const w = averageWindow([
+      { joints: { leftKnee: 1 }, diffs: { leftKnee: 10 }, overall: 1 },
+      { joints: { leftKnee: 0.5, leftAnkle: 0.4 }, diffs: { leftKnee: -10, leftAnkle: 30 }, overall: 0.4 },
+    ])
+    expect(w).toEqual({ joints: { leftKnee: 0.75, leftAnkle: 0.4 }, diffs: { leftKnee: 0, leftAnkle: 30 }, overall: 0.7 })
+  })
+
+  it('has audio-ready phrases for every cue', () => {
+    expect(ALL_CUES.length).toBeGreaterThan(20)
+    expect(new Set(ALL_CUES).size).toBe(ALL_CUES.length)
+  })
+})
+
+describe('standing still is not dancing', () => {
+  const frame = (t, angles) => ({ t, angles })
+
+  it('weights the joints that move in the step', () => {
+    const frames = [frame(0, { leftElbow: 60, leftKnee: 175 }), frame(1, { leftElbow: 170, leftKnee: 178 })]
+    const w = jointWeights(frames, 0, 1)
+    expect(w.leftElbow).toBe(1)
+    expect(w.leftKnee).toBeCloseTo(0.15)
+    // Matching only the still legs while the arm is way off scores low.
+    const s = scorePose({ leftElbow: 60, leftKnee: 176 }, { leftElbow: 170, leftKnee: 176 }, undefined, w)
+    expect(s.overall).toBeLessThan(0.2)
+  })
+
+  it('scores a frozen dancer far lower than a moving one', () => {
+    const still = new MotionMeter(), moving = new MotionMeter()
+    for (let i = 0; i < 20; i++) {
+      const t = i / 10
+      const ref = { leftElbow: 90 + 60 * Math.sin(i), rightKnee: 150 + 20 * Math.cos(i) }
+      still.add(t, { leftElbow: 90, rightKnee: 150 }, ref)
+      moving.add(t, { leftElbow: 92 + 55 * Math.sin(i), rightKnee: 151 + 18 * Math.cos(i) }, ref)
+    }
+    expect(still.ratio()).toBeLessThan(0.05)
+    expect(moving.ratio()).toBeGreaterThan(0.85)
+    expect(withMotion(1, still.ratio())).toBeLessThan(0.3)
+    expect(withMotion(1, moving.ratio())).toBeGreaterThan(0.9)
+  })
+
+  it("doesn't punish holding still while the tutorial holds still", () => {
+    const m = new MotionMeter()
+    for (let i = 0; i < 20; i++) m.add(i / 10, { leftElbow: 90 }, { leftElbow: 90 + (i % 2) })
+    expect(m.ratio()).toBe(1)
   })
 })

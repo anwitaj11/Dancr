@@ -388,6 +388,7 @@ main.immersive { padding: 0; }
 .sheet-head .score-ring { position: relative; top: 0; right: 0; width: 72px; height: 72px; }
 .sheet-head h2 { font-family: var(--serif); font-weight: 900; font-size: 1.7rem; }
 .sheet-head p { margin: 2px 0 0; font-size: 0.85rem; }
+.move-on-question { margin: 4px 0 12px; text-align: center; font-family: var(--serif); font-weight: 900; font-size: 1.25rem; }
 .coach-bubble { display: flex; gap: 10px; margin: 0 0 14px; padding: 12px 14px; background: var(--yellow); border: 2px solid var(--ink); border-radius: 18px 18px 18px 4px; font-weight: 700; }
 .joint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin-bottom: 18px; }
 .joint-row { display: grid; grid-template-columns: 84px 1fr 28px; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 500; }

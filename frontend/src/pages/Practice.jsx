@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
-import { AngleSmoother, bodyInFrame, computeAngles } from '../lib/angles.js'
+import { AngleSmoother, bodyInFrame, computeAngles, mirrorAngles } from '../lib/angles.js'
 import { BODY_PARTS, JOINT_NAMES, LABELS, P } from '../lib/joints.js'
-import { LoopStats, PASS_SCORE, colorFor, countAt, matchWithTiming, pct, timingLabel } from '../lib/scoring.js'
+import { LoopStats, MotionMeter, PASS_SCORE, colorFor, countAt, jointWeights, matchWithTiming, pct, sampleAt, timingLabel, withMotion } from '../lib/scoring.js'
+import { ALL_CUES, averageWindow, pickCue } from '../lib/cues.js'
 import { buildChunks } from '../lib/steps.js'
-import { click, preloadCounts, say, scheduleCountIn } from '../lib/voice.js'
+import { click, preloadCounts, preloadLines, say, scheduleCountIn } from '../lib/voice.js'
 import { useWebcamPose } from '../hooks/useWebcamPose.js'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
 import ReferenceVideo from '../components/ReferenceVideo.jsx'
@@ -41,6 +42,30 @@ function savePreviewPref(on) {
   } catch {
     // storage blocked: the choice lasts for this visit only
   }
+}
+
+/** Remembered on/off settings (music, spoken cues); on unless turned off. */
+function loadFlag(key) {
+  try {
+    return localStorage.getItem(key) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+function saveFlag(key, on) {
+  try {
+    localStorage.setItem(key, on ? 'on' : 'off')
+  } catch {
+    // storage blocked: the choice lasts for this visit only
+  }
+}
+
+/** Swap left/right weight names for mirror mode (weights are sizes, so nothing is negated). */
+function mirrorWeights(weights) {
+  return Object.fromEntries(Object.entries(weights).map(([j, w]) => [
+    j.startsWith('left') ? j.replace('left', 'right') : j.startsWith('right') ? j.replace('right', 'left') : j, w,
+  ]))
 }
 
 // Skeleton overlay: whole body (default), only the limbs that are wrong, or none.
@@ -96,7 +121,9 @@ export default function Practice() {
   const [passed, setPassed] = useState(() => new Set()) // steps completed this session
   const [speed, setSpeed] = useState(1)
   const [mirror, setMirror] = useState(true)
-  const [loop, setLoop] = useState(true)
+  const [musicOn, setMusicOn] = useState(() => loadFlag('dablab.music'))
+  const [cuesOn, setCuesOn] = useState(() => loadFlag('dablab.cues'))
+  const [ducked, setDucked] = useState(false) // music quieter while a spoken line plays
   const [drillOn, setDrillOn] = useState(false)
   const [skeletonMode, setSkeletonMode] = useState(loadSkeletonPref)
   const [previewFirst, setPreviewFirst] = useState(loadPreviewPref)
@@ -111,7 +138,7 @@ export default function Practice() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [tip, setTip] = useState(null)
   const voiceCoach = useCoachContext()
-  const [celebrate, setCelebrate] = useState(null) // step | dance
+  const [celebrate, setCelebrate] = useState(null) // 'dance' when the whole dance is done
 
   const canvasRef = useRef(null)
   const progressRef = useRef(null)
@@ -123,10 +150,16 @@ export default function Practice() {
   const cropX = useRef(null)
   const tries = useRef({})
   const timers = useRef([])
+  const motion = useRef(new MotionMeter())
+  const cueSamples = useRef([])
+  const lastCue = useRef(null)
+  const speaking = useRef(false)
+  const lastCueBeat = useRef(0)
 
   useEffect(() => {
     api.getDance(id).then((d) => { setDance(refreshAngles(d.data)); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
-    preloadCounts()
+    // Count-in first (needed soonest), then the spoken cues, all in the ElevenLabs voice.
+    preloadCounts().then(() => preloadLines(['Step complete!', 'You nailed it!', ...ALL_CUES]))
     api.getProfile(user).then((p) => {
       setProfile(p)
       setChunkCounts(p.adaptations.chunkCounts)
@@ -138,6 +171,12 @@ export default function Practice() {
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
   const chunk = chunks[chunkIdx]
   const adapt = profile?.adaptations
+  // Joints that move in this step count most; mirrored to match the mirrored tutorial.
+  const weights = useMemo(() => {
+    if (!dance || !chunk) return null
+    const w = jointWeights(dance.frames, chunk.start, chunk.end)
+    return mirror ? mirrorWeights(w) : w
+  }, [dance, chunk, mirror])
   const drill = adapt?.drill
   const scoredJoints = drillOn && drill ? BODY_PARTS[drill.part] : JOINT_NAMES
   const loud = adapt?.rhythmMode
@@ -163,6 +202,28 @@ export default function Practice() {
     timers.current = []
     setCountIn(null)
     setClockPhase('idle')
+  }
+
+  /** Say a line in the ElevenLabs voice, ducking the music underneath it. */
+  function speak(text) {
+    if (speaking.current || voiceCoach?.voiceActive) return // never talk over ourselves or the voice coach
+    speaking.current = true
+    setDucked(true)
+    say(text).finally(() => {
+      speaking.current = false
+      setDucked(false)
+    })
+  }
+
+  /** Every half bar while dancing: one fix for the worst body part, or some encouragement. */
+  function maybeCue() {
+    const samples = cueSamples.current
+    cueSamples.current = []
+    if (!cuesOn || samples.length < 3) return
+    const cue = pickCue(averageWindow(samples), lastCue.current)
+    if (!cue) return
+    lastCue.current = cue
+    speak(cue)
   }
 
   function beginCountIn() {
@@ -193,6 +254,9 @@ export default function Practice() {
     setCelebrate(null)
     setSheetOpen(false)
     stats.current = new LoopStats()
+    motion.current.reset()
+    cueSamples.current = []
+    lastCueBeat.current = 0
     smoother.current.reset()
     lastCount.current = null
     if (withPreview) {
@@ -226,14 +290,14 @@ export default function Practice() {
     setResult(summary)
     setTip(null)
 
+    // Never move on (or retry) by itself: the results popup asks what to do next.
+    const lastStep = chunkIdx === chunks.length - 1
     if (summary.passed) {
-      const last = chunkIdx === chunks.length - 1
       setPassed((prev) => new Set(prev).add(chunkIdx))
-      setCelebrate(last ? 'dance' : 'step')
-      say(last ? 'You nailed it!' : 'Step complete!')
-    } else {
-      setSheetOpen(true)
+      speak(lastStep ? 'You nailed it!' : 'Step complete!')
     }
+    if (summary.passed && lastStep) setCelebrate('dance')
+    else setSheetOpen(true)
 
     const attempt = {
       user, dance_id: Number(id), step_index: chunk.steps[0], overall: summary.overall,
@@ -250,11 +314,10 @@ export default function Practice() {
       try {
         const { tip: text } = await api.coachTip(user, context)
         setTip(text)
-        if (!voiceCoach?.voiceActive) say(text) // don't talk over the voice coach
+        speak(text)
       } catch {
         setTip(null)
       }
-      if (loop) later(() => start({ withPreview: false }), 4000)
     }
   }
 
@@ -292,7 +355,14 @@ export default function Practice() {
       setOutOfFrame(!bodyInFrame(pose).ok)
       const angles = smoother.current.push(computeAngles(pose, vw / vh))
       const t = refTime()
-      const match = matchWithTiming(angles, dance.frames, t, { mirror, joints: scoredJoints })
+      const match = matchWithTiming(angles, dance.frames, t, { mirror, joints: scoredJoints, weights })
+      // Standing still while the tutorial dances scores low, however good the pose.
+      let score = match.overall
+      if (dancing) {
+        const refNow = sampleAt(dance.frames, t).angles
+        motion.current.add(performance.now() / 1000, angles, mirror ? mirrorAngles(refNow) : refNow)
+        score = withMotion(match.overall, motion.current.ratio())
+      }
       if (skeletonMode !== 'off') {
         // Same selfie flip and crop as the video, so limbs line up with the body.
         const kx = canvas.width / cropW, ky = canvas.height / cropH
@@ -305,13 +375,14 @@ export default function Practice() {
       }
       if (dancing) {
         const count = countAt(t, dance.bpm, dance.countStart)
-        stats.current.add({ count, joints: match.joints, overall: match.overall, offset: match.offset })
-        setLive({ overall: match.overall, offset: match.offset, count, parts: partScores(match.joints) })
+        stats.current.add({ count, joints: match.joints, overall: score, offset: match.offset })
+        cueSamples.current.push({ joints: match.joints, diffs: match.diffs, overall: score })
+        setLive({ overall: score, offset: match.offset, count, parts: partScores(match.joints) })
       }
       // Burn the score into the frame so it shows up in Vine recordings.
       ctx.font = `900 ${Math.round(canvas.height / 14)}px 'DM Sans', system-ui`
-      const label = pct(match.overall)
-      ctx.fillStyle = colorFor(match.overall)
+      const label = pct(score)
+      ctx.fillStyle = colorFor(score)
       ctx.strokeStyle = '#1d1030'
       ctx.lineWidth = Math.max(3, canvas.height / 160)
       const x = (canvas.width - ctx.measureText(label).width) / 2, y = canvas.height * 0.17
@@ -338,7 +409,14 @@ export default function Practice() {
       const count = countAt(t, dance.bpm, dance.countStart)
       if (count !== lastCount.current) {
         lastCount.current = count
-        click({ accent: count === 1, loud })
+        // With the song playing, the music is the beat; clicks only in rhythm mode.
+        if (!(hasVideo && musicOn) || loud) click({ accent: count === 1, loud })
+      }
+      // A spoken cue every half bar (4 beats), even if a slow frame skips a count.
+      const beat = Math.floor(((t - chunk.start) * dance.bpm) / 60)
+      if (beat - lastCueBeat.current >= 4) {
+        lastCueBeat.current = beat
+        maybeCue()
       }
       if (t >= chunk.end) finishLoop()
     }
@@ -404,7 +482,8 @@ export default function Practice() {
               <div className="duet-half tutorial">
                 {hasVideo ? (
                   <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
-                    speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror} className="fill" />
+                    speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror}
+                    muted={!musicOn} volume={ducked ? 0.25 : 0.9} className="fill" />
                 ) : (
                   <SkeletonPlayer dance={dance} getTime={refTime} mirror={mirror} width={360} height={480}
                     color="#ff3ea5" highlight={drillOn ? drill?.joint : undefined} className="fill" />
@@ -466,7 +545,12 @@ export default function Practice() {
               <RailButton icon="👀" label="Preview" active={previewFirst}
                 onClick={() => setPreviewFirst((on) => { savePreviewPref(!on); return !on })} />
               <RailButton icon="🪞" label="Mirror" active={mirror} onClick={() => setMirror((m) => !m)} />
-              <RailButton icon="🔁" label="Loop" active={loop} onClick={() => setLoop((l) => !l)} />
+              {hasVideo && (
+                <RailButton icon={musicOn ? '🔊' : '🔇'} label="Music" active={musicOn}
+                  onClick={() => setMusicOn((on) => { saveFlag('dablab.music', !on); return !on })} />
+              )}
+              <RailButton icon="🗣️" label="Voice cues" active={cuesOn}
+                onClick={() => setCuesOn((on) => { saveFlag('dablab.cues', !on); return !on })} />
               {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
               <RailButton icon={<span className="speed-icon">{chunkCounts}</span>} label="Counts" disabled={busy}
                 onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setPassed(new Set()) }} />
@@ -551,13 +635,22 @@ export default function Practice() {
                   </div>
                 ))}
               </div>
+              {chunkIdx < chunks.length - 1 && (
+                <p className="move-on-question">
+                  {result.passed ? `Do you wanna move on to ${chunks[chunkIdx + 1].label}?` : `Practice more, or move on to ${chunks[chunkIdx + 1].label} anyway?`}
+                </p>
+              )}
               <div className="row center">
-                <button className="btn-teal" onClick={() => start()}>try again →</button>
+                <button className="btn-teal" onClick={() => start()}>↺ try again</button>
                 {chunkIdx < chunks.length - 1 && (
-                  <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
+                  <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>
+                    {result.passed ? 'YES, MOVE ON →' : 'MOVE ON ANYWAY →'}
+                  </button>
+                )}
+                {chunkIdx === chunks.length - 1 && !result.passed && (
+                  <button className="btn-bracket" onClick={() => setSheetOpen(false)}>[ CLOSE ]</button>
                 )}
               </div>
-              {loop && !result.passed && <p className="muted small center">Looping automatically…</p>}
             </div>
           </Win>
         </div>
@@ -566,14 +659,12 @@ export default function Practice() {
       {celebrate && (
         <div className="celebrate dots" onClick={() => setCelebrate(null)}>
           <div className="burst" aria-hidden="true">{'🔥💯👌✨🔥💯👌✨'.match(/\p{Extended_Pictographic}/gu).map((e, i) => <span key={i} style={{ '--i': i }}>{e}</span>)}</div>
-          <Headline lines={celebrate === 'dance' ? [['DANCE'], ['COMPLETE!', 'yellow']] : [['STEP'], ['COMPLETE!', 'yellow']]} size="lg" as="h2" />
-          <p className="script big">{celebrate === 'dance' ? 'you learned the whole thing. iconic.' : 'on to the next one!'}</p>
+          <Headline lines={[['DANCE'], ['COMPLETE!', 'yellow']]} size="lg" as="h2" />
+          <p className="script big">you learned the whole thing. iconic.</p>
           <div className="row center" onClick={(e) => e.stopPropagation()}>
-            {celebrate === 'step' && chunkIdx < chunks.length - 1 && (
-              <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
-            )}
-            {celebrate === 'dance' && <Link className="btn-pink" to="/profile">SEE MY PROGRESS →</Link>}
-            {celebrate === 'dance' && <Link className="btn-bracket" to={`/remix/${id}`}>[ REMIX IT ]</Link>}
+            <button className="btn-teal" onClick={() => { setCelebrate(null); start() }}>↺ dance it again</button>
+            <Link className="btn-pink" to="/profile">SEE MY PROGRESS →</Link>
+            <Link className="btn-bracket" to={`/remix/${id}`}>[ REMIX IT ]</Link>
           </div>
         </div>
       )}

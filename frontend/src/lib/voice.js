@@ -4,24 +4,54 @@ import { api } from './api.js'
 const cache = new Map()
 let audioCtx = null
 
-/** Speak with the ElevenLabs voice, falling back to the browser's built-in voice. */
+/**
+ * Speak with the ElevenLabs voice, falling back to the browser's built-in voice.
+ * Resolves when the line has finished playing (so music can duck underneath it).
+ */
 export async function say(text, { volume = 1 } = {}) {
   try {
-    if (!cache.has(text)) cache.set(text, api.tts(text).then((blob) => URL.createObjectURL(blob)))
-    const url = await cache.get(text)
+    const url = await audioUrl(text)
     const audio = new Audio(url)
     audio.volume = volume
-    await audio.play()
+    await new Promise((resolve, reject) => {
+      audio.onended = resolve
+      audio.onerror = reject
+      audio.play().catch(reject)
+    })
   } catch {
     cache.delete(text)
-    if ('speechSynthesis' in window) {
+    if (!('speechSynthesis' in window)) return
+    await new Promise((resolve) => {
       const u = new SpeechSynthesisUtterance(text)
       // Always English, even when the computer's own language is something else.
       u.lang = 'en-US'
       u.voice = englishVoice()
       u.volume = volume
       u.rate = 1.1
+      u.onend = resolve
+      u.onerror = resolve
       speechSynthesis.speak(u)
+    })
+  }
+}
+
+function audioUrl(text) {
+  if (!cache.has(text)) cache.set(text, api.tts(text).then((blob) => URL.createObjectURL(blob)))
+  return cache.get(text)
+}
+
+/**
+ * Fetch ElevenLabs audio for a set of lines in the background, one at a time
+ * (the backend caches them on disk, so each line is only generated once ever).
+ * Stops quietly at the first failure, e.g. when no ElevenLabs key is set.
+ */
+export async function preloadLines(lines) {
+  for (const text of lines) {
+    try {
+      await audioUrl(text)
+    } catch {
+      cache.delete(text)
+      return
     }
   }
 }

@@ -3,8 +3,8 @@ import { mirrorAngles } from './angles.js'
 
 // Forgiving scoring: small differences from the tutorial still count as a
 // full match, and scores are shown as a plain percentage.
-export const FULL_CREDIT_ZONE = 20 // degrees off that still earn full credit
-export const ZERO_AT = 75 // degrees off where a joint earns nothing
+export const FULL_CREDIT_ZONE = 15 // degrees off that still earn full credit
+export const ZERO_AT = 60 // degrees off where a joint earns nothing
 export const PASS_SCORE = 0.7 // 70%+ completes a step
 export const TIMING_WINDOW = 0.5 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
@@ -21,14 +21,80 @@ export function pct(score) {
   return `${Math.round(score * 100)}%`
 }
 
-/** Scores every joint both the dancer and the tutorial show; hidden joints are skipped, not counted wrong. */
-export function scorePose(userAngles, refAngles, joints = JOINT_NAMES) {
-  const scores = {}
+/**
+ * Scores every joint both the dancer and the tutorial show; hidden joints are skipped, not counted wrong.
+ * diffs[j] = dancer angle − tutorial angle (which way they're off, for spoken fixes).
+ */
+export function scorePose(userAngles, refAngles, joints = JOINT_NAMES, weights = null) {
+  const scores = {}, diffs = {}
+  let sum = 0, total = 0
   for (const j of joints) {
-    if (j in userAngles && j in refAngles) scores[j] = jointScore(userAngles[j] - refAngles[j])
+    if (j in userAngles && j in refAngles) {
+      diffs[j] = userAngles[j] - refAngles[j]
+      scores[j] = jointScore(diffs[j])
+      const w = weights?.[j] ?? 1
+      sum += scores[j] * w
+      total += w
+    }
   }
-  const values = Object.values(scores)
-  return { joints: scores, overall: values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0 }
+  return { joints: scores, diffs, overall: total ? sum / total : 0 }
+}
+
+/**
+ * How much each joint matters in one step: joints that move a lot in the tutorial
+ * count fully, joints that barely move (standing legs, an upright torso) count
+ * for little, so just standing there can't match "most of the body".
+ */
+export function jointWeights(frames, start, end, { full = 40, min = 0.15 } = {}) {
+  const lo = {}, hi = {}
+  for (const f of frames) {
+    if (f.t < start || f.t > end) continue
+    for (const [j, v] of Object.entries(f.angles)) {
+      lo[j] = Math.min(lo[j] ?? v, v)
+      hi[j] = Math.max(hi[j] ?? v, v)
+    }
+  }
+  const weights = {}
+  for (const j of Object.keys(lo)) weights[j] = Math.min(1, Math.max(min, (hi[j] - lo[j]) / full))
+  return weights
+}
+
+/**
+ * Compares how much the dancer is moving with how much the tutorial moves over
+ * the last couple of seconds. ratio() is ~1 when they move as much (or more),
+ * and drops toward 0 when they stand still while the tutorial dances.
+ */
+export class MotionMeter {
+  constructor(windowSec = 2) {
+    this.windowSec = windowSec
+    this.samples = []
+  }
+  add(t, userAngles, refAngles) {
+    this.samples.push({ t, user: userAngles, ref: refAngles })
+    while (this.samples.length && this.samples[0].t < t - this.windowSec) this.samples.shift()
+  }
+  static travel(samples, key) {
+    let total = 0
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1][key], b = samples[i][key]
+      for (const j of Object.keys(b)) if (j in a) total += Math.abs(b[j] - a[j])
+    }
+    return total
+  }
+  ratio() {
+    if (this.samples.length < 3) return 1
+    const ref = MotionMeter.travel(this.samples, 'ref')
+    if (ref < 60) return 1 // the tutorial is (nearly) holding still here: nothing to compare
+    return Math.min(1, MotionMeter.travel(this.samples, 'user') / ref)
+  }
+  reset() {
+    this.samples = []
+  }
+}
+
+/** Final score for a moment: pose match, scaled down when the dancer isn't moving like the tutorial. */
+export function withMotion(poseScore, motionRatio) {
+  return poseScore * (0.25 + 0.75 * motionRatio)
 }
 
 export function colorFor(score) {
@@ -62,12 +128,12 @@ export function sampleAt(frames, t) {
  * Compare the user's pose with the reference within ±window seconds of t.
  * offset > 0: the user matches a later reference moment (early); < 0: late.
  */
-export function matchWithTiming(userAngles, frames, t, { mirror = false, joints, window = TIMING_WINDOW, step = 1 / 30 } = {}) {
+export function matchWithTiming(userAngles, frames, t, { mirror = false, joints, weights, window = TIMING_WINDOW, step = 1 / 30 } = {}) {
   let best = null
   for (let d = -window; d <= window + 1e-9; d += step) {
     let ref = sampleAt(frames, t + d).angles
     if (mirror) ref = mirrorAngles(ref)
-    const s = scorePose(userAngles, ref, joints)
+    const s = scorePose(userAngles, ref, joints, weights)
     // Prefer offsets near 0 on ties so a static pose doesn't read as off-beat.
     if (!best || s.overall > best.overall + 1e-6 || (Math.abs(s.overall - best.overall) <= 1e-6 && Math.abs(d) < Math.abs(best.offset))) {
       best = { ...s, offset: d }
