@@ -366,10 +366,6 @@ main.immersive { padding: 0; }
 .polaroid-btn { position: relative; flex: 0 0 170px; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
 .polaroid-btn:disabled { cursor: default; }
 .done-mark { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--lime); border: 2px solid var(--ink); font-weight: 900; }
-.live-rating {
-  position: absolute; top: 112px; right: 10px; padding: 4px 12px; background: #fff; border: 3px solid var(--c);
-  box-shadow: 3px 3px 0 var(--ink); font-family: var(--display); font-size: 1.4rem; color: var(--ink); animation: pop 0.25s ease-out;
-}
 .here-sticker { position: absolute; top: -12px; right: -6px; z-index: 3; transform: rotate(8deg); background: var(--hot); color: #fff; border: 2px solid var(--ink); padding: 2px 10px; font-family: var(--script); font-size: 1.15rem; }
 
 .notepad .win-body { background: var(--cream); display: flex; flex-direction: column; gap: 12px; padding: 22px; }
@@ -394,7 +390,7 @@ main.immersive { padding: 0; }
 .sheet-head p { margin: 2px 0 0; font-size: 0.85rem; }
 .coach-bubble { display: flex; gap: 10px; margin: 0 0 14px; padding: 12px 14px; background: var(--yellow); border: 2px solid var(--ink); border-radius: 18px 18px 18px 4px; font-weight: 700; }
 .joint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin-bottom: 18px; }
-.joint-row { display: grid; grid-template-columns: 84px 1fr; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 500; }
+.joint-row { display: grid; grid-template-columns: 84px 1fr 28px; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 500; }
 .joint-row b { text-align: right; }
 .bar { height: 10px; border: 2px solid var(--ink); border-radius: 99px; background: #fff; overflow: hidden; }
 .bar > div { height: 100%; transition: width 0.3s; }
@@ -504,7 +500,7 @@ main.immersive { padding: 0; }
 .profile-stats { display: grid; grid-template-columns: repeat(3, 1fr); background: #fff; border: 2px solid var(--ink); text-align: center; padding: 8px 0; }
 .profile-stats div { display: flex; flex-direction: column; }
 .profile-stats b { font-family: var(--serif); font-weight: 900; font-size: 1.4rem; }
-.skill-row { display: grid; grid-template-columns: 30px 70px 1fr 150px; gap: 12px; align-items: center; margin: 12px 0; text-transform: capitalize; font-weight: 700; }
+.skill-row { display: grid; grid-template-columns: 30px 70px 1fr 50px; gap: 12px; align-items: center; margin: 12px 0; text-transform: capitalize; font-weight: 700; }
 .skill-row b { text-align: right; }
 .skill-icon { font-size: 1.4rem; }
 .chart { width: 100%; }
@@ -557,8 +553,7 @@ main.immersive { padding: 0; }
   .half-note { display: none; }
   .score-ring { width: 46px; height: 46px; }
   .timing-tag { top: 60px; }
-  .live-rating { top: 88px; font-size: 1rem; }
-  .beat-count { font-size: 2.2rem; }
+    .beat-count { font-size: 2.2rem; }
   .part-pill { padding: 2px 6px; font-size: 0.6rem; }
   .countin { font-size: 6rem; }
   .joint-grid { grid-template-columns: 1fr; }

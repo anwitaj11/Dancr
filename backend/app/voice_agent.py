@@ -16,6 +16,22 @@ import httpx
 TOKEN_URL = "https://api.elevenlabs.io/v1/convai/conversation/token"
 
 
+def _env(name: str) -> str:
+    """Setting from .env, forgiving stray spaces or quotes around the value."""
+    return os.getenv(name, "").strip().strip('"').strip("'").strip()
+
+
+def _reason(response) -> str:
+    """ElevenLabs' own explanation from an error response, e.g. a missing permission."""
+    try:
+        detail = response.json().get("detail")
+    except ValueError:
+        return ""
+    if isinstance(detail, dict):
+        return str(detail.get("message") or detail.get("status") or "")
+    return str(detail or "")
+
+
 class VoiceAgentError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -24,11 +40,11 @@ class VoiceAgentError(Exception):
 
 
 def session() -> dict:
-    agent_id = os.getenv("ELEVENLABS_AGENT_ID", "").strip()
+    agent_id = _env("ELEVENLABS_AGENT_ID")
     if not agent_id:
         raise VoiceAgentError(503, "The voice coach isn't set up yet: add ELEVENLABS_AGENT_ID to backend/.env.")
 
-    api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+    api_key = _env("ELEVENLABS_API_KEY")
     if not api_key:
         return {"mode": "public", "agentId": agent_id}
 
@@ -37,8 +53,11 @@ def session() -> dict:
     except httpx.HTTPError:
         raise VoiceAgentError(502, "Couldn't reach ElevenLabs. Check your internet connection and try again.")
     if r.status_code in (401, 403):
-        raise VoiceAgentError(502, "ElevenLabs rejected the API key. Check ELEVENLABS_API_KEY in backend/.env "
-                                   "and that the key has access to ElevenLabs Agents.")
+        reason = _reason(r)
+        raise VoiceAgentError(502, "ElevenLabs rejected the API key"
+                                   + (f" ({reason})" if reason else "")
+                                   + ". Check ELEVENLABS_API_KEY in backend/.env (no quotes or spaces), that the key"
+                                   " wasn't deleted, and that it has access to ElevenLabs Agents.")
     if r.status_code == 404:
         raise VoiceAgentError(502, "ElevenLabs couldn't find that agent. Check ELEVENLABS_AGENT_ID in backend/.env.")
     if r.status_code >= 400:

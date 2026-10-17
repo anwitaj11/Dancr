@@ -12,8 +12,8 @@ const MAX_LINES = 6
 
 const BASE_CONTEXT = [
   'You are talking to a dancer inside Dancr, a webcam dance-learning app.',
-  'Dancr tracks their pose with the webcam and rates each try as PERFECT, SUPER, GOOD, OK or KEEP GOING.',
-  'You cannot see the dancer or the video. Only use the facts in these Dancr updates; never invent ratings or claim to see their moves.',
+  'Dancr tracks their pose with the webcam and scores each try as a match percentage (70% or more completes a step).',
+  'You cannot see the dancer or the video. Only use the facts in these Dancr updates; never invent scores or claim to see their moves.',
 ].join(' ')
 
 function friendlyError(message = '') {

@@ -10,7 +10,7 @@ export const PRESETS = {
   seated: { emoji: '♿', label: 'Low-impact / Seated', amplitude: 1, speed: 1, sharpness: 0, smoothing: 0, upperBodyOnly: true },
 }
 
-const LOWER_BODY = [P.lHip, P.rHip, P.lKnee, P.rKnee, P.lAnkle, P.rAnkle]
+const LOWER_BODY = [P.lHip, P.rHip, P.lKnee, P.rKnee, P.lAnkle, P.rAnkle, P.lFoot, P.rFoot]
 
 /**
  * Remix a dance by transforming its pose sequence, then recomputing angles,

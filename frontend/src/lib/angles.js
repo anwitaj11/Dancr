@@ -1,4 +1,4 @@
-import { JOINTS, MIRROR_POINTS, POSE_LANDMARKS } from './joints.js'
+import { JOINTS, MIRROR_POINTS, P, POSE_LANDMARKS } from './joints.js'
 
 /** Angle at vertex b, in degrees (0–180), from 2D points [x, y]. */
 export function angle(a, b, c) {
@@ -18,16 +18,31 @@ export function toPose(landmarks) {
   })
 }
 
+export const MIN_VISIBILITY = 0.5
+
 /**
- * Stored pose → { leftElbow: deg, ... } for the 8 scored joints.
+ * Stored pose → { leftElbow: deg, ..., legSpread, torsoLean } for every
+ * angle the camera can actually see. A joint is left out (not scored) when
+ * any of its points is missing or MediaPipe isn't confident it's visible,
+ * so a leg hidden behind furniture doesn't count as a wrong move.
  * Normalized x and y use different units on a non-square video, so x is
  * scaled by the aspect ratio (width / height) first.
  */
 export function computeAngles(pose, aspect = 1) {
+  const seen = (...idx) => idx.every((i) => pose[i] && (pose[i][2] ?? 1) >= MIN_VISIBILITY)
   const pt = (i) => [pose[i][0] * aspect, pose[i][1]]
+  const mid = (i, j) => [(pt(i)[0] + pt(j)[0]) / 2, (pt(i)[1] + pt(j)[1]) / 2]
   const out = {}
   for (const [name, [a, b, c]] of Object.entries(JOINTS)) {
-    out[name] = round(angle(pt(a), pt(b), pt(c)), 1)
+    if (seen(a, b, c)) out[name] = round(angle(pt(a), pt(b), pt(c)), 1)
+  }
+  if (seen(P.lHip, P.rHip, P.lKnee, P.rKnee)) {
+    out.legSpread = round(angle(pt(P.lKnee), mid(P.lHip, P.rHip), pt(P.rKnee)), 1)
+  }
+  if (seen(P.lShoulder, P.rShoulder, P.lHip, P.rHip)) {
+    const [sx, sy] = mid(P.lShoulder, P.rShoulder), [hx, hy] = mid(P.lHip, P.rHip)
+    // 0 = upright; positive when the shoulders lean toward the image right.
+    out.torsoLean = round((Math.atan2(sx - hx, hy - sy) * 180) / Math.PI, 1)
   }
   return out
 }
@@ -36,14 +51,20 @@ export function computeAngles(pose, aspect = 1) {
 export function mirrorAngles(angles) {
   const out = {}
   for (const [name, value] of Object.entries(angles)) {
-    const other = name.startsWith('left') ? name.replace('left', 'right') : name.replace('right', 'left')
-    out[other] = value
+    if (name === 'torsoLean') out[name] = -value // leaning right in a mirror is leaning left
+    else if (name.startsWith('left')) out[name.replace('left', 'right')] = value
+    else if (name.startsWith('right')) out[name.replace('right', 'left')] = value
+    else out[name] = value
   }
   return out
 }
 
 export function mirrorPose(pose) {
-  return MIRROR_POINTS.map((i) => [1 - pose[i][0], pose[i][1], pose[i][2]])
+  // Works for 15-point poses and older 13-point ones (no feet).
+  return pose.map((_, k) => {
+    const p = pose[MIRROR_POINTS[k]]
+    return [1 - p[0], p[1], p[2]]
+  })
 }
 
 /** Moving average of the last `size` angle readings (3–5 frames smooths jitter). */
@@ -55,9 +76,11 @@ export class AngleSmoother {
   push(angles) {
     this.history.push(angles)
     if (this.history.length > this.size) this.history.shift()
+    // Average each angle over the recent frames that saw it.
     const out = {}
     for (const name of Object.keys(angles)) {
-      out[name] = this.history.reduce((s, a) => s + a[name], 0) / this.history.length
+      const seen = this.history.filter((a) => name in a)
+      out[name] = seen.reduce((s, a) => s + a[name], 0) / seen.length
     }
     return out
   }

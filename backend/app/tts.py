@@ -11,7 +11,7 @@ CACHE_DIR = Path(os.getenv("DABLAB_AUDIO_CACHE", Path(__file__).parent.parent / 
 VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uYXf8XasLslADfZ2MB4u")  # same voice as the Dancr Coach agent
 MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
 
-STOCK_LINES = ["5, 6, 7, 8!", "Nice!", "Let's go!", "Step complete!", "You nailed it!"]
+STOCK_LINES = ["Five!", "Six!", "Seven!", "Eight!", "Nice!", "Step complete!", "You nailed it!"]
 
 
 class TTSUnavailable(Exception):
@@ -27,7 +27,7 @@ def speak(text: str) -> Path:
     path = cache_path(text)
     if path.exists():
         return path
-    api_key = os.getenv("ELEVENLABS_API_KEY")
+    api_key = os.getenv("ELEVENLABS_API_KEY", "").strip().strip("\"").strip("'").strip()
     if not api_key:
         raise TTSUnavailable("ELEVENLABS_API_KEY is not set")
     try:

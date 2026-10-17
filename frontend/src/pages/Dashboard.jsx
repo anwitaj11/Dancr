@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, currentUser } from '../lib/api.js'
-import { colorFor, ratingFor } from '../lib/scoring.js'
+import { colorFor, pct } from '../lib/scoring.js'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
 import { useCoachSummary } from '../lib/coachContext.jsx'
 
@@ -23,7 +23,7 @@ function ProgressChart({ history }) {
       <polyline points={points} fill="none" stroke="url(#line)" strokeWidth="3" strokeLinejoin="round" />
       {history.map((d, i) => (
         <g key={d.date}>
-          <circle cx={x(i)} cy={y(d.avg)} r="6" fill="#ff3ea5" stroke="#1d1030" strokeWidth="2"><title>{`${d.date}: ${ratingFor(d.avg).label}`}</title></circle>
+          <circle cx={x(i)} cy={y(d.avg)} r="6" fill="#ff3ea5" stroke="#1d1030" strokeWidth="2"><title>{`${d.date}: ${pct(d.avg)}`}</title></circle>
           <text x={x(i)} y={h - 4} textAnchor="middle">{d.date.slice(5)}</text>
         </g>
       ))}
@@ -54,7 +54,7 @@ export default function Dashboard() {
     `The dancer (@${user}) is looking at their progress page.`,
     `They have made ${profile.stats.attempts} tries and completed ${profile.stats.stepsPassed} steps. Learner type: ${profile.badge.label}.`,
     Object.keys(profile.skills.parts ?? {}).length
-      ? `Skill ratings: ${Object.entries(profile.skills.parts).map(([p, v]) => `${p} ${ratingFor(v).label}`).join(', ')}.` : '',
+      ? `Skill scores: ${Object.entries(profile.skills.parts).map(([p, v]) => `${p} ${pct(v)}`).join(', ')}.` : '',
     profile.patterns.length ? `Patterns: ${profile.patterns.map((p) => `${p.label} (${p.detail})`).join('; ')}.` : '',
   ].filter(Boolean).join(' ') : '')
 
@@ -93,7 +93,7 @@ export default function Dashboard() {
                 <span className="skill-icon">{PART_ICONS[part]}</span>
                 <span className="skill-name">{part}</span>
                 <div className="bar chunky"><div style={{ width: `${v * 100}%`, background: colorFor(v) }} /></div>
-                <b className="skill-rating">{ratingFor(v).emoji} {ratingFor(v).label}</b>
+                <b>{pct(v)}</b>
               </div>
             ))}
           </Win>

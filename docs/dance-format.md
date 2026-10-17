@@ -20,9 +20,12 @@ Every dance (built-in, uploaded, or remixed) is one JSON object, stored in the
         "leftElbow": 172.4,  "rightElbow": 170.1,   // shoulder–elbow–wrist
         "leftShoulder": 18.0, "rightShoulder": 17.2, // elbow–shoulder–hip
         "leftHip": 176.5,    "rightHip": 175.9,     // shoulder–hip–knee
-        "leftKnee": 178.0,   "rightKnee": 177.3     // hip–knee–ankle
+        "leftKnee": 178.0,   "rightKnee": 177.3,    // hip–knee–ankle
+        "leftAnkle": 112.0,  "rightAnkle": 110.5,   // knee–ankle–foot tip
+        "legSpread": 14.2,                          // left knee–hip centre–right knee
+        "torsoLean": -3.1                           // upper body tilt from upright, + toward image right
       },
-      "pose": [[0.5, 0.15, 0.99], ...]  // 13 × [x, y, visibility], normalized to the video frame
+      "pose": [[0.5, 0.15, 0.99], ...]  // 15 × [x, y, visibility] (13 in dances saved before feet were tracked)
     }
   ],
   "steps": [
@@ -35,8 +38,10 @@ Every dance (built-in, uploaded, or remixed) is one JSON object, stored in the
 
 - **Left/right** are the dancer's own left and right (MediaPipe convention).
 - **`pose` point order** (indices into MediaPipe's 33 landmarks):
-  nose 0, shoulders 11/12, elbows 13/14, wrists 15/16, hips 23/24, knees 25/26, ankles 27/28.
+  nose 0, shoulders 11/12, elbows 13/14, wrists 15/16, hips 23/24, knees 25/26, ankles 27/28, foot tips 31/32.
   See `frontend/src/lib/joints.js`.
+- An angle is only stored (and scored) when MediaPipe sees all its points with visibility ≥ 0.5.
+  Dancr recomputes angles from `pose` when a dance loads, so older dances pick up new angles.
 - **Angles are the scoring data.** They don't depend on body size. `pose` is
   kept for drawing the reference skeleton and for remixes, which transform
   points and then recompute angles.

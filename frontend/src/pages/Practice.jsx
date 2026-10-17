@@ -3,13 +3,14 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import { AngleSmoother, bodyInFrame, computeAngles } from '../lib/angles.js'
 import { BODY_PARTS, JOINT_NAMES, LABELS, P } from '../lib/joints.js'
-import { LoopStats, colorFor, countAt, matchWithTiming, ratingFor, timingLabel } from '../lib/scoring.js'
+import { LoopStats, PASS_SCORE, colorFor, countAt, matchWithTiming, pct, timingLabel } from '../lib/scoring.js'
 import { buildChunks } from '../lib/steps.js'
-import { click, say } from '../lib/voice.js'
+import { click, preloadCounts, say, scheduleCountIn } from '../lib/voice.js'
 import { useWebcamPose } from '../hooks/useWebcamPose.js'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
 import ReferenceVideo from '../components/ReferenceVideo.jsx'
-import { drawMistakeLimbs } from '../lib/skeleton.js'
+import { drawBodyOverlay } from '../lib/skeleton.js'
+import { refreshAngles } from '../lib/dance.js'
 import VineRecorder from '../components/VineRecorder.jsx'
 import SpeedPicker, { formatSpeed, nearestSpeed } from '../components/SpeedPicker.jsx'
 import RailButton from '../components/RailButton.jsx'
@@ -42,17 +43,22 @@ function savePreviewPref(on) {
   }
 }
 
+// Skeleton overlay: whole body (default), only the limbs that are wrong, or none.
+const SKELETON_MODES = ['full', 'mistakes', 'off']
+const SKELETON_LABELS = { full: 'FULL BODY', mistakes: 'MISTAKES', off: 'OFF' }
+
 function loadSkeletonPref() {
   try {
-    return localStorage.getItem(SKELETON_KEY) !== 'off'
+    const saved = localStorage.getItem(SKELETON_KEY)
+    return SKELETON_MODES.includes(saved) ? saved : 'full'
   } catch {
-    return true
+    return 'full'
   }
 }
 
-function saveSkeletonPref(on) {
+function saveSkeletonPref(mode) {
   try {
-    localStorage.setItem(SKELETON_KEY, on ? 'on' : 'off')
+    localStorage.setItem(SKELETON_KEY, mode)
   } catch {
     // storage blocked: the choice lasts for this visit only
   }
@@ -75,7 +81,7 @@ function ScoreRing({ value }) {
         <circle cx="32" cy="32" r={r} className="track" />
         <circle cx="32" cy="32" r={r} className="fill" strokeDasharray={`${value * c} ${c}`} />
       </svg>
-      <span aria-label={ratingFor(value).label}>{ratingFor(value).emoji}</span>
+      <span>{Math.round(value * 100)}</span>
     </div>
   )
 }
@@ -92,7 +98,7 @@ export default function Practice() {
   const [mirror, setMirror] = useState(true)
   const [loop, setLoop] = useState(true)
   const [drillOn, setDrillOn] = useState(false)
-  const [skeletonOn, setSkeletonOn] = useState(loadSkeletonPref)
+  const [skeletonMode, setSkeletonMode] = useState(loadSkeletonPref)
   const [previewFirst, setPreviewFirst] = useState(loadPreviewPref)
   const [hasVideo, setHasVideo] = useState(false)
   const [difficulty, setDifficulty] = useState(1)
@@ -119,7 +125,8 @@ export default function Practice() {
   const timers = useRef([])
 
   useEffect(() => {
-    api.getDance(id).then((d) => { setDance(d.data); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
+    api.getDance(id).then((d) => { setDance(refreshAngles(d.data)); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
+    preloadCounts()
     api.getProfile(user).then((p) => {
       setProfile(p)
       setChunkCounts(p.adaptations.chunkCounts)
@@ -161,15 +168,22 @@ export default function Practice() {
   function beginCountIn() {
     setClockPhase('countin')
     const beatMs = (60 / (dance.bpm * speed)) * 1000
-    say('5, 6, 7, 8!', { volume: loud ? 1 : 0.8 })
-    for (let i = 0; i < COUNT_IN_BEATS; i++) {
-      later(() => { setCountIn(5 + i); click({ accent: i === 0, loud }) }, i * beatMs)
+    // Audio is scheduled on the audio clock; the screen and the dance clock follow
+    // the same start time, so the numbers, the voice and the music line up.
+    const firstBeat = scheduleCountIn(beatMs, { loud })
+    clock.current.t0 = firstBeat + COUNT_IN_BEATS * beatMs // dancing starts exactly one bar later
+    const tick = () => {
+      if (clock.current.phase !== 'countin') return
+      const beat = Math.floor((performance.now() - firstBeat) / beatMs)
+      if (beat >= COUNT_IN_BEATS) {
+        setCountIn(null)
+        setClockPhase('dancing')
+        return
+      }
+      setCountIn(beat >= 0 ? 5 + beat : null)
+      requestAnimationFrame(tick)
     }
-    later(() => {
-      setCountIn(null)
-      clock.current.t0 = performance.now()
-      setClockPhase('dancing')
-    }, COUNT_IN_BEATS * beatMs)
+    tick()
   }
 
   /** Watch-first preview (unless turned off), then the count-in, then dance. */
@@ -279,14 +293,14 @@ export default function Practice() {
       const angles = smoother.current.push(computeAngles(pose, vw / vh))
       const t = refTime()
       const match = matchWithTiming(angles, dance.frames, t, { mirror, joints: scoredJoints })
-      if (skeletonOn) {
+      if (skeletonMode !== 'off') {
         // Same selfie flip and crop as the video, so limbs line up with the body.
         const kx = canvas.width / cropW, ky = canvas.height / cropH
         ctx.save()
         ctx.translate(canvas.width, 0)
         ctx.scale(-1, 1)
-        drawMistakeLimbs(ctx, pose, match.joints, ([x, y]) => [(x * vw - sx) * kx, (y * vh - sy) * ky],
-          { width: Math.max(8, canvas.height / 45) })
+        drawBodyOverlay(ctx, pose, match.joints, ([x, y]) => [(x * vw - sx) * kx, (y * vh - sy) * ky],
+          { mode: skeletonMode, width: Math.max(8, canvas.height / 45) })
         ctx.restore()
       }
       if (dancing) {
@@ -296,9 +310,8 @@ export default function Practice() {
       }
       // Burn the score into the frame so it shows up in Vine recordings.
       ctx.font = `900 ${Math.round(canvas.height / 14)}px 'DM Sans', system-ui`
-      const rating = ratingFor(match.overall)
-      const label = `${rating.label}!`
-      ctx.fillStyle = rating.color
+      const label = pct(match.overall)
+      ctx.fillStyle = colorFor(match.overall)
       ctx.strokeStyle = '#1d1030'
       ctx.lineWidth = Math.max(3, canvas.height / 160)
       const x = (canvas.width - ctx.measureText(label).width) / 2, y = canvas.height * 0.17
@@ -309,7 +322,7 @@ export default function Practice() {
     }
     ctx.font = `700 ${Math.round(canvas.height / 22)}px Caveat, cursive`
     ctx.fillStyle = '#ffffffdd'
-    ctx.fillText(APP_NAME, canvas.width - ctx.measureText(APP_NAME).width - 14, 34)
+    ctx.fillText(APP_NAME, canvas.width - ctx.measureText(APP_NAME).width - 14, canvas.height - 56) // clear of the score ring
 
     if (clock.current.phase === 'preview' || dancing) {
       const t = refTime()
@@ -336,9 +349,9 @@ export default function Practice() {
     `The dancer (@${user}) is practicing "${dance.name}" (${Math.round(dance.bpm)} BPM),`,
     `${chunk.label} of ${chunks.length}, at ${speed}x speed${mirror ? ', mirrored' : ''}.`,
     result
-      ? `Their last try on this step was rated ${ratingFor(result.overall).label}; weakest joint: ${LABELS[result.weakestJoint]};`
-        + ` lowest-rated count: ${result.worstCount}; timing: ${timingLabel(result.timingOffset)}.`
-        + ` Body parts: ${Object.entries(partScores(result.joints)).map(([p, v]) => `${p} ${ratingFor(v).label}`).join(', ')}.`
+      ? `Their last try on this step scored ${pct(result.overall)} (${PASS_SCORE * 100}% completes a step); weakest joint: ${LABELS[result.weakestJoint]};`
+        + ` lowest-scoring count: ${result.worstCount}; timing: ${timingLabel(result.timingOffset)}.`
+        + ` Body parts: ${Object.entries(partScores(result.joints)).map(([p, v]) => `${p} ${pct(v)}`).join(', ')}.`
       : 'They have not finished a try on this step yet.',
     profile?.patterns?.length ? `Learning patterns Dancr noticed: ${profile.patterns.map((p) => `${p.label} (${p.detail})`).join('; ')}.` : '',
     tip ? `Dancr's last written tip: "${tip}"` : '',
@@ -404,17 +417,18 @@ export default function Practice() {
                 <video ref={videoRef} playsInline muted className="hidden-video" />
                 <canvas ref={canvasRef} className="fill" />
                 <span className="half-tag">@{user}</span>
-                <button className={`skeleton-toggle ${skeletonOn ? 'on' : ''}`} aria-pressed={skeletonOn}
-                  title="Show limbs that don't match the tutorial"
-                  onClick={() => setSkeletonOn((on) => { saveSkeletonPref(!on); return !on })}>
-                  🦴 Skeleton: {skeletonOn ? 'ON' : 'OFF'}
+                <button className={`skeleton-toggle ${skeletonMode !== 'off' ? 'on' : ''}`}
+                  title="Tap to switch: full body, only mistakes, or off"
+                  onClick={() => setSkeletonMode((m) => {
+                    const next = SKELETON_MODES[(SKELETON_MODES.indexOf(m) + 1) % SKELETON_MODES.length]
+                    saveSkeletonPref(next)
+                    return next
+                  })}>
+                  🦴 Skeleton: {SKELETON_LABELS[skeletonMode]}
                 </button>
                 {phase === 'dancing' && live && (
                   <>
                     <ScoreRing value={ringValue} />
-                    <span className="live-rating" key={ratingFor(live.overall).label} style={{ '--c': ratingFor(live.overall).color }}>
-                      {ratingFor(live.overall).label}!
-                    </span>
                     <span className={`beat-count ${loud ? 'loud' : ''}`}>{live.count}</span>
                     <span className={`timing-tag ${timingLabel(live.offset).replace(' ', '-')}`}>{timingLabel(live.offset)}</span>
                     <div className="part-pills">
@@ -492,12 +506,12 @@ export default function Practice() {
           <span className="tag tag-lilac">STEP {chunkIdx + 1} OF {chunks.length}</span>
           <h3 className="notepad-step">{chunk?.label.toLowerCase()}</h3>
           <p className="notepad-text">
-            {tip ?? `Watch the tutorial, then hit practice. Hit SUPER or better to complete the step, or jump to any step you like. Your coach will chime in if you get stuck.`}
+            {tip ?? `Watch the tutorial, then hit practice. Score ${PASS_SCORE * 100}% or more to complete the step, or jump to any step you like. Your coach will chime in if you get stuck.`}
           </p>
           {result && (
             <div className="last-try" onClick={() => setSheetOpen(true)}>
               <ScoreRing value={result.overall} />
-              <div><b>last try: {ratingFor(result.overall).label} {ratingFor(result.overall).emoji}</b><span>{result.passed ? 'step complete!' : 'tap for details'}</span></div>
+              <div><b>last try: {pct(result.overall)}</b><span>{result.passed ? 'step complete!' : 'tap for details'}</span></div>
             </div>
           )}
           <hr />
@@ -520,9 +534,9 @@ export default function Practice() {
               <div className="sheet-head">
                 <ScoreRing value={result.overall} />
                 <div>
-                  <h2 style={{ color: ratingFor(result.overall).color }}>{ratingFor(result.overall).label}! {ratingFor(result.overall).emoji}</h2>
+                  <h2>{result.passed ? `${pct(result.overall)} 🔥` : pct(result.overall)}</h2>
                   <p className="muted">
-                    {result.passed ? 'Step complete!' : 'SUPER or better completes this step'} · {timingLabel(result.timingOffset)}
+                    {result.passed ? 'Step complete!' : `${PASS_SCORE * 100}% completes this step`} · {timingLabel(result.timingOffset)}
                     {' '}({result.timingOffset >= 0 ? '+' : ''}{result.timingOffset.toFixed(2)}s)
                   </p>
                 </div>
@@ -533,6 +547,7 @@ export default function Practice() {
                   <div key={j} className="joint-row">
                     <span>{LABELS[j]}</span>
                     <div className="bar"><div style={{ width: `${s * 100}%`, background: colorFor(s) }} /></div>
+                    <b>{Math.round(s * 100)}</b>
                   </div>
                 ))}
               </div>

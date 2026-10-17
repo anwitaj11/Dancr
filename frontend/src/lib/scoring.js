@@ -1,38 +1,34 @@
 import { JOINT_NAMES } from './joints.js'
 import { mirrorAngles } from './angles.js'
 
-// Forgiving scoring, in the spirit of Just Dance / Dance Central: small
-// differences count as perfect, and results are shown as named tiers.
-export const PERFECT_ZONE = 20 // degrees off that still earn full credit
+// Forgiving scoring: small differences from the tutorial still count as a
+// full match, and scores are shown as a plain percentage.
+export const FULL_CREDIT_ZONE = 20 // degrees off that still earn full credit
 export const ZERO_AT = 75 // degrees off where a joint earns nothing
-export const RATINGS = [
-  { min: 0.85, label: 'PERFECT', emoji: '🌟', color: '#22c55e' },
-  { min: 0.7, label: 'SUPER', emoji: '🔥', color: '#84cc16' },
-  { min: 0.5, label: 'GOOD', emoji: '👍', color: '#facc15' },
-  { min: 0.25, label: 'OK', emoji: '👌', color: '#fb923c' },
-  { min: 0, label: 'KEEP GOING', emoji: '💪', color: '#ff2d55' },
-]
-export const PASS_SCORE = 0.7 // SUPER or better completes a step
+export const PASS_SCORE = 0.7 // 70%+ completes a step
 export const TIMING_WINDOW = 0.5 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
-/** 1 within PERFECT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
+/** 1 within FULL_CREDIT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
 export function jointScore(diff) {
   const off = Math.abs(diff)
-  if (off <= PERFECT_ZONE) return 1
-  return Math.max(0, 1 - (off - PERFECT_ZONE) / (ZERO_AT - PERFECT_ZONE))
+  if (off <= FULL_CREDIT_ZONE) return 1
+  return Math.max(0, 1 - (off - FULL_CREDIT_ZONE) / (ZERO_AT - FULL_CREDIT_ZONE))
 }
 
-/** The named tier (PERFECT / SUPER / GOOD / OK / KEEP GOING) for a 0–1 score. */
-export function ratingFor(score) {
-  return RATINGS.find((r) => score >= r.min) ?? RATINGS.at(-1)
+/** A 0–1 score as the percentage dancers see, e.g. "72%". */
+export function pct(score) {
+  return `${Math.round(score * 100)}%`
 }
 
+/** Scores every joint both the dancer and the tutorial show; hidden joints are skipped, not counted wrong. */
 export function scorePose(userAngles, refAngles, joints = JOINT_NAMES) {
   const scores = {}
-  for (const j of joints) scores[j] = jointScore(userAngles[j] - refAngles[j])
+  for (const j of joints) {
+    if (j in userAngles && j in refAngles) scores[j] = jointScore(userAngles[j] - refAngles[j])
+  }
   const values = Object.values(scores)
-  return { joints: scores, overall: values.reduce((s, v) => s + v, 0) / values.length }
+  return { joints: scores, overall: values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0 }
 }
 
 export function colorFor(score) {
@@ -55,7 +51,7 @@ export function sampleAt(frames, t) {
   const a = frames[lo], b = frames[hi]
   const k = (t - a.t) / (b.t - a.t)
   const angles = {}
-  for (const j of Object.keys(a.angles)) angles[j] = a.angles[j] + (b.angles[j] - a.angles[j]) * k
+  for (const j of Object.keys(a.angles)) angles[j] = j in b.angles ? a.angles[j] + (b.angles[j] - a.angles[j]) * k : a.angles[j]
   const pose = a.pose && b.pose
     ? a.pose.map((p, i) => [p[0] + (b.pose[i][0] - p[0]) * k, p[1] + (b.pose[i][1] - p[1]) * k, p[2]])
     : a.pose
@@ -104,9 +100,11 @@ export class LoopStats {
   summary() {
     const n = this.samples.length
     if (!n) return null
+    // Each joint is averaged over the frames where it was visible.
     const joints = {}
-    for (const j of Object.keys(this.samples[0].joints)) {
-      joints[j] = this.samples.reduce((s, x) => s + x.joints[j], 0) / n
+    for (const j of new Set(this.samples.flatMap((x) => Object.keys(x.joints)))) {
+      const seen = this.samples.filter((x) => j in x.joints)
+      joints[j] = seen.reduce((s, x) => s + x.joints[j], 0) / seen.length
     }
     const overall = this.samples.reduce((s, x) => s + x.overall, 0) / n
     const offsets = this.samples.map((x) => x.offset).sort((a, b) => a - b)

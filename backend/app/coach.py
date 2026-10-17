@@ -10,8 +10,6 @@ import os
 
 import anthropic
 
-from .learner import rating
-
 log = logging.getLogger(__name__)
 
 MODEL = os.getenv("DABLAB_MODEL", "claude-opus-5-5")
@@ -21,6 +19,8 @@ JOINT_NAMES = {
     "leftShoulder": "left arm", "rightShoulder": "right arm",
     "leftHip": "left hip", "rightHip": "right hip",
     "leftKnee": "left knee", "rightKnee": "right knee",
+    "leftAnkle": "left foot", "rightAnkle": "right foot",
+    "legSpread": "leg spread", "torsoLean": "torso lean",
 }
 
 TIP_SYSTEM = (
@@ -29,13 +29,13 @@ TIP_SYSTEM = (
     "of how the dancer is doing. Reply with exactly one encouraging sentence, under 20 "
     "words, giving the single most useful fix. Name a body part or a count when you can. "
     "The sentence will be read aloud mid-dance, so no emoji, lists, or quotes. "
-    "Never mention numbers, percentages or scores; dancers only see ratings like SUPER or GOOD."
+    "Dancers see their scores as match percentages."
 )
 
 REPORT_SYSTEM = (
     "You write the end-of-session report in Dab Lab, a webcam dance coaching app. "
     "From the dancer's stats, write short, specific, upbeat notes. Each item is one sentence. "
-    "Never mention numbers, percentages or scores; use the rating words (PERFECT, SUPER, GOOD, OK) instead."
+    "Scores are match percentages; 70% or more completes a step."
 )
 
 REPORT_SCHEMA = {
@@ -97,11 +97,11 @@ def summarize(profile: dict, context: dict | None = None) -> str:
     lines = []
     parts = profile.get("skills", {}).get("parts", {})
     if parts:
-        lines.append("Skill by body part: " + ", ".join(f"{p} {rating(v)}" for p, v in parts.items()))
+        lines.append("Skill by body part: " + ", ".join(f"{p} {v:.0%}" for p, v in parts.items()))
     joints = profile.get("skills", {}).get("joints", {})
     if joints:
         weakest = min(joints, key=joints.get)
-        lines.append(f"Weakest joint: {JOINT_NAMES[weakest]} ({rating(joints[weakest])})")
+        lines.append(f"Weakest joint: {JOINT_NAMES[weakest]} ({joints[weakest]:.0%})")
     for p in profile.get("patterns", []):
         lines.append(f"Pattern: {p['label']} ({p['detail']})")
     stats = profile.get("stats", {})
@@ -109,7 +109,7 @@ def summarize(profile: dict, context: dict | None = None) -> str:
         lines.append(f"Attempts: {stats.get('attempts', 0)}, steps passed: {stats.get('stepsPassed', 0)}")
     if context:
         if "score" in context:
-            lines.append(f"Last loop rating: {rating(context['score'])}")
+            lines.append(f"Last loop score: {context['score']:.0%}")
         if context.get("weakestJoint"):
             lines.append(f"Worst joint this loop: {JOINT_NAMES.get(context['weakestJoint'], context['weakestJoint'])}")
         if context.get("timingOffset") is not None:
@@ -157,8 +157,8 @@ def report(profile: dict) -> dict:
     parts = profile.get("skills", {}).get("parts", {})
     ranked = sorted(parts, key=parts.get, reverse=True)
     return {
-        "strengths": [f"Your {p} are rated {rating(parts[p])}." for p in ranked[:2]] or ["You showed up and danced!"],
-        "weaknesses": [f"Your {p} are rated {rating(parts[p])}, so give them extra practice." for p in ranked[-1:]] if ranked else [],
+        "strengths": [f"Your {p} are at {parts[p]:.0%}." for p in ranked[:2]] or ["You showed up and danced!"],
+        "weaknesses": [f"Your {p} are at {parts[p]:.0%}, so give them extra practice." for p in ranked[-1:]] if ranked else [],
         "plan": ["Warm up with the step you passed last.", "Drill your weakest body part at 0.7x.",
                  "Try the full dance at 1x."],
         "source": "rules",

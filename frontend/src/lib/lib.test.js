@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { angle, computeAngles, isTPose, mirrorAngles, AngleSmoother } from './angles.js'
 import { buildChunks, fromCuts, mergeWithNext, moveCut, splitAt, splitIntoSteps, toCuts } from './steps.js'
-import { LoopStats, countAt, jointScore, matchWithTiming, ratingFor, sampleAt, scorePose } from './scoring.js'
+import { LoopStats, countAt, jointScore, matchWithTiming, pct, sampleAt, scorePose } from './scoring.js'
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
@@ -47,18 +47,15 @@ describe('scoring', () => {
     expect(jointScore(-90)).toBe(0)
   })
 
-  it('maps scores to rating tiers', () => {
-    expect(ratingFor(0.9).label).toBe('PERFECT')
-    expect(ratingFor(0.72).label).toBe('SUPER')
-    expect(ratingFor(0.5).label).toBe('GOOD')
-    expect(ratingFor(0.3).label).toBe('OK')
-    expect(ratingFor(0.1).label).toBe('KEEP GOING')
+  it('shows scores as percentages', () => {
+    expect(pct(0.724)).toBe('72%')
+    expect(pct(1)).toBe('100%')
   })
 
   it('averages joint scores', () => {
     const ref = Object.fromEntries(JOINT_NAMES.map((j) => [j, 90]))
     const user = { ...ref, leftKnee: 165 }
-    expect(scorePose(user, ref).overall).toBeCloseTo(7 / 8)
+    expect(scorePose(user, ref).overall).toBeCloseTo((JOINT_NAMES.length - 1) / JOINT_NAMES.length)
     expect(scorePose({ ...ref, leftKnee: 105 }, ref).overall).toBe(1)
   })
 
@@ -91,7 +88,7 @@ describe('scoring', () => {
     expect(s.overall).toBeCloseTo(0.75)
     expect(s.worstCount).toBe(2)
     expect(s.weakestJoint).toBe('rightKnee')
-    expect(s.passed).toBe(true) // 75% is SUPER, which completes a step
+    expect(s.passed).toBe(true) // 75% is over the 70% that completes a step
   })
 })
 
@@ -221,5 +218,49 @@ describe('moving dancers', () => {
     const d = trackDancer(raw, 0, 0)
     expect(d.map((f) => Math.round(f.t * 30))).toEqual([0, 1, 2, 6, 7, 8])
     expect(d.every((f) => poseCenter(f.pose)[0] < 0.7)).toBe(true) // never grabbed the bystander
+  })
+})
+
+describe('full-body angles', () => {
+  // Standing pose with feet (15 points), facing the camera.
+  const stand = () => [
+    [0.5, 0.1, 1], [0.56, 0.25, 1], [0.44, 0.25, 1], [0.6, 0.4, 1], [0.4, 0.4, 1], [0.6, 0.55, 1], [0.4, 0.55, 1],
+    [0.54, 0.55, 1], [0.46, 0.55, 1], [0.54, 0.72, 1], [0.46, 0.72, 1], [0.54, 0.9, 1], [0.46, 0.9, 1],
+    [0.56, 0.93, 1], [0.44, 0.93, 1],
+  ]
+
+  it('measures feet, leg spread and torso lean', () => {
+    const a = computeAngles(stand())
+    expect(Object.keys(a)).toEqual(expect.arrayContaining(['leftAnkle', 'rightAnkle', 'legSpread', 'torsoLean']))
+    expect(a.torsoLean).toBeCloseTo(0, 0) // upright
+    const wide = stand()
+    wide[P.lKnee] = [0.64, 0.72, 1]; wide[P.rKnee] = [0.36, 0.72, 1]
+    expect(computeAngles(wide).legSpread).toBeGreaterThan(a.legSpread + 20)
+    const lean = stand()
+    for (const i of [P.nose, P.lShoulder, P.rShoulder]) lean[i] = [lean[i][0] + 0.1, lean[i][1], 1]
+    expect(computeAngles(lean).torsoLean).toBeGreaterThan(15)
+    expect(mirrorAngles(computeAngles(lean)).torsoLean).toBeLessThan(-15)
+  })
+
+  it('skips joints the camera cannot see instead of marking them wrong', () => {
+    const hidden = stand()
+    hidden[P.lAnkle][2] = 0.1 // left ankle barely visible
+    const a = computeAngles(hidden)
+    expect(a).not.toHaveProperty('leftKnee')
+    expect(a).not.toHaveProperty('leftAnkle')
+    expect(a).toHaveProperty('rightKnee')
+    const old = stand().slice(0, 13) // dances saved before feet were tracked
+    expect(computeAngles(old)).not.toHaveProperty('leftAnkle')
+    const ref = computeAngles(stand())
+    const s = scorePose(a, ref)
+    expect(s.joints).not.toHaveProperty('leftKnee')
+    expect(s.overall).toBe(1)
+  })
+
+  it('averages each joint over the frames where it was seen', () => {
+    const stats = new LoopStats()
+    stats.add({ count: 1, joints: { leftKnee: 1, leftAnkle: 0.5 }, overall: 0.75, offset: 0 })
+    stats.add({ count: 2, joints: { leftKnee: 0.6 }, overall: 0.6, offset: 0 })
+    expect(stats.summary().joints).toEqual({ leftKnee: 0.8, leftAnkle: 0.5 })
   })
 })

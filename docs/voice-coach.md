@@ -69,10 +69,10 @@ The exact menu names change from time to time, so look for these settings on you
   > Be encouraging and specific.
   >
   > Dancr sends you background updates about what it measured: the dance and step,
-  > ratings (PERFECT, SUPER, GOOD, OK, KEEP GOING), the weakest joint, timing (early,
+  > match percentages (70% or more completes a step), the weakest joint, timing (early,
   > late, on beat) and learning patterns. Use them to personalise feedback. You cannot
-  > see the dancer or their camera: never claim to see them, and never invent ratings
-  > Dancr didn't send. Never mention numbers or percentages; use the rating words.
+  > see the dancer or their camera: never claim to see them, and never invent scores
+  > Dancr didn't send.
   > If someone seems hurt or in pain, tell them to stop and rest.
 
 - **First message (optional):** e.g. *"Hey! I'm your Dancr coach. Which move are we working on?"*
@@ -84,11 +84,11 @@ Dancr only tells the coach what it actually measured, as plain-text background u
 
 | Page | What's sent |
 |---|---|
-| Practice | dance, step, speed, mirror on/off, last rating, weakest joint, lowest-rated count, timing, body-part ratings, learning patterns, the last written tip |
-| My Practice | number of tries and steps, learner type, skill ratings, patterns |
+| Practice | dance, step, speed, mirror on/off, last score, weakest joint, lowest-scoring count, timing, body-part scores, learning patterns, the last written tip |
+| My Practice | number of tries and steps, learner type, skill scores, patterns |
 | Home | which dances are in the library |
 
-Updates are sent when the conversation starts and again whenever a new rating comes in.
+Updates are sent when the conversation starts and again whenever a new score comes in.
 While you're talking to the coach, the practice page's own spoken tips stay quiet so the
 two don't talk over each other.
 

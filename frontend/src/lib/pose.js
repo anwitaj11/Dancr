@@ -2,7 +2,8 @@ import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision'
 
 // Served from public/ (wasm is copied there on `npm install`), so tracking works offline.
 const WASM_URL = `${import.meta.env.BASE_URL}mediapipe/wasm`
-const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_lite.task`
+// The full model (vs lite) tracks legs and feet much more reliably.
+const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`
 
 let fileset = null
 

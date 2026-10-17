@@ -65,7 +65,8 @@ def test_full_flow():
         # five weak, late tries on one step → slow + timing + legs detail drill
         for _ in range(5):
             profile = attempt(client, dance_id=dance_id, timing_offset=-0.3,
-                              joint_scores=scores(0.8, leftKnee=0.3, rightKnee=0.4))
+                              joint_scores=scores(0.8, leftKnee=0.3, rightKnee=0.4, leftAnkle=0.4,
+                                                rightAnkle=0.4, legSpread=0.4))
         ids = {p["id"] for p in profile["patterns"]}
         assert {"slow", "timing", "details"} <= ids
         assert profile["adaptations"]["chunkCounts"] == 4
@@ -116,9 +117,11 @@ def test_voice_agent_session(monkeypatch):
         assert "sk_secret" not in str(body)
         assert seen["params"] == {"agent_id": "agent_test"} and seen["headers"]["xi-api-key"] == "sk_secret"
 
-        monkeypatch.setattr(voice_agent.httpx, "get", lambda *a, **k: FakeResponse(401, {}))
+        monkeypatch.setattr(voice_agent.httpx, "get", lambda *a, **k: FakeResponse(
+            401, {"detail": {"status": "missing_permissions", "message": "The API key is missing the convai_write permission"}}))
         r = client.get("/voice-agent/session")
         assert r.status_code == 502 and "rejected the API key" in r.json()["detail"]
+        assert "missing the convai_write permission" in r.json()["detail"]
 
 
 def test_skill_ema():

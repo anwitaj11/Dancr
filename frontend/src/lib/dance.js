@@ -21,6 +21,16 @@ export function buildDance({ name, bpm, countStart = 0, fps = 30, aspect = 16 / 
   }
 }
 
+/**
+ * Recompute every frame's angles from its pose with the current angle set, so
+ * dances saved before an angle existed (e.g. leg spread, torso lean) score it too.
+ * Angles that need points the old recording didn't keep (feet) are simply skipped.
+ */
+export function refreshAngles(dance) {
+  const aspect = dance.aspect ?? 16 / 9
+  return { ...dance, frames: dance.frames.map((f) => (f.pose ? { ...f, angles: computeAngles(f.pose, aspect) } : f)) }
+}
+
 /** Bounding box of every pose in the dance, so playback doesn't jitter in scale. */
 export function danceBounds(frames, aspect = 16 / 9) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
