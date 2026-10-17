@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.venv/
+__pycache__/
+*.db
+backend/audio_cache/
+frontend/public/mediapipe/wasm/
+.pytest_cache/
