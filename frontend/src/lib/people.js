@@ -19,6 +19,30 @@ export function pickLargest(poses) {
   return poses.reduce((best, p) => (poseSize(p) > poseSize(best) ? p : best), poses[0])
 }
 
+const TORSO = [P.lShoulder, P.rShoulder, P.lHip, P.rHip]
+const SAME_PERSON = 0.05 // torso points closer than this on average (fraction of the frame) = one body
+
+/** How confident the model is about a pose: total visibility of its points. */
+function confidence(pose) {
+  return pose.reduce((s, p) => s + (p[2] ?? 1), 0)
+}
+
+/**
+ * The pose model sometimes finds the same body two or three times (slightly
+ * shifted copies). Keep one pose per body: the most confident one.
+ */
+export function dedupePoses(poses) {
+  const kept = []
+  for (const pose of [...poses].sort((a, b) => confidence(b) - confidence(a))) {
+    const duplicate = kept.some((k) => {
+      const d = TORSO.reduce((s, i) => s + Math.hypot(pose[i][0] - k[i][0], pose[i][1] - k[i][1]), 0) / TORSO.length
+      return d < SAME_PERSON
+    })
+    if (!duplicate) kept.push(pose)
+  }
+  return kept
+}
+
 /** Same people, ordered left to right as they appear in the video. */
 export function sortLeftToRight(poses) {
   return [...poses].sort((a, b) => poseCenter(a)[0] - poseCenter(b)[0])

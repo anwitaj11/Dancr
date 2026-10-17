@@ -1,7 +1,17 @@
 export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
 
+// fetch() only throws when the request never got an answer, almost always because
+// the backend isn't running. Say that instead of the browser's "Failed to fetch".
+async function send(url, init) {
+  try {
+    return await fetch(url, init)
+  } catch {
+    throw new Error(`can't reach the Dancr backend at ${API_URL}. Is the backend window running (uvicorn app.main:app --reload)?`)
+  }
+}
+
 async function request(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await send(`${API_URL}${path}`, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -30,8 +40,12 @@ export const api = {
   tts: (text) => request('/tts', { method: 'POST', body: { text } }).then((r) => r.blob()),
   remix: (text) => json('/remix', { method: 'POST', body: { request: text } }),
   uploadVideo: (id, file) =>
-    fetch(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-      .then((r) => { if (!r.ok) throw new Error(`video upload failed: ${r.status}`) }),
+    send(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      .then(async (r) => {
+        if (r.ok) return
+        const detail = await r.json().then((b) => b?.detail).catch(() => null)
+        throw new Error(`video upload failed: ${typeof detail === 'string' ? detail : r.status}`)
+      }),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
   voiceSession: () => json('/voice-agent/session'),

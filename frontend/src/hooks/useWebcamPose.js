@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getLandmarker } from '../lib/pose.js'
 import { toPose } from '../lib/angles.js'
-import { pickLargest } from '../lib/people.js'
+import { dedupePoses, pickLargest } from '../lib/people.js'
 
 /**
  * Webcam + PoseLandmarker loop. Calls onFrame({ pose, people, video, now }) every
@@ -40,7 +40,7 @@ export function useWebcamPose(onFrame) {
           if (video.readyState >= 2 && now > lastTs) {
             lastTs = now
             const result = landmarker.detectForVideo(video, now)
-            const poses = (result.landmarks ?? []).map(toPose)
+            const poses = dedupePoses((result.landmarks ?? []).map(toPose))
             onFrameRef.current?.({ pose: poses.length ? pickLargest(poses) : null, people: poses.length, video, now })
           }
           raf = requestAnimationFrame(loop)

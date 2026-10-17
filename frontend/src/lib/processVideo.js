@@ -1,9 +1,9 @@
 import { closeLandmarker, getLandmarker } from './pose.js'
 import { toPose } from './angles.js'
-import { poseCenter, sortLeftToRight } from './people.js'
+import { dedupePoses, poseCenter, sortLeftToRight } from './people.js'
 
-const MAX_PEOPLE = 4
-const PERSON_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#00b3a4']
+const MAX_PEOPLE = 8
+const PERSON_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#00b3a4', '#7b3dff', '#e0b400', '#00a3e0', '#d6336c']
 
 /**
  * Run PoseLandmarker over every frame of a video file, keeping everyone it sees.
@@ -33,7 +33,7 @@ export async function processVideoFile(file, { fps = 30, onProgress } = {}) {
       video.currentTime = Math.min(t + 0.001, video.duration)
       await once(video, 'seeked')
       const result = landmarker.detectForVideo(video, Math.round(t * 1000) + 1)
-      const poses = (result.landmarks ?? []).map(toPose)
+      const poses = dedupePoses((result.landmarks ?? []).map(toPose))
       raw.push({ t: Math.round(t * 1000) / 1000, poses })
       if (poses.length > people) {
         people = poses.length

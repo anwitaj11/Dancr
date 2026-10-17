@@ -6,7 +6,7 @@ import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
 import { ALL_CUES, ENCOURAGEMENT, averageWindow, pickCue } from './cues.js'
-import { pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer } from './people.js'
+import { dedupePoses, pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer } from './people.js'
 
 describe('angles', () => {
   it('measures the angle at the middle point', () => {
@@ -327,5 +327,17 @@ describe('standing still is not dancing', () => {
     const m = new MotionMeter()
     for (let i = 0; i < 20; i++) m.add(i / 10, { leftElbow: 90 }, { leftElbow: 90 + (i % 2) })
     expect(m.ratio()).toBe(1)
+  })
+})
+
+describe('dedupePoses', () => {
+  const body = (x, vis = 0.9) => Array.from({ length: 15 }, (_, i) => [x + (i % 3) * 0.01, 0.2 + i * 0.04, vis])
+  it('merges detections of the same dancer, keeping the most confident', () => {
+    const out = dedupePoses([body(0.5, 0.6), body(0.51, 0.95), body(0.505, 0.7)])
+    expect(out).toHaveLength(1)
+    expect(out[0][0][2]).toBe(0.95)
+  })
+  it('keeps dancers standing apart', () => {
+    expect(dedupePoses([body(0.2), body(0.5), body(0.8)])).toHaveLength(3)
   })
 })
