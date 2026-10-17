@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, currentUser } from '../lib/api.js'
 import { colorFor, ratingFor } from '../lib/scoring.js'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
+import { useCoachSummary } from '../lib/coachContext.jsx'
 
 const PART_ICONS = { arms: '💪', torso: '🧍', legs: '🦵' }
 
@@ -48,6 +49,14 @@ export default function Dashboard() {
       setLoading(false)
     }
   }
+
+  useCoachSummary(profile ? [
+    `The dancer (@${user}) is looking at their progress page.`,
+    `They have made ${profile.stats.attempts} tries and completed ${profile.stats.stepsPassed} steps. Learner type: ${profile.badge.label}.`,
+    Object.keys(profile.skills.parts ?? {}).length
+      ? `Skill ratings: ${Object.entries(profile.skills.parts).map(([p, v]) => `${p} ${ratingFor(v).label}`).join(', ')}.` : '',
+    profile.patterns.length ? `Patterns: ${profile.patterns.map((p) => `${p.label} (${p.detail})`).join('; ')}.` : '',
+  ].filter(Boolean).join(' ') : '')
 
   if (!profile) return <div className="page-loading"><div className="spinner" /></div>
   const parts = profile.skills.parts ?? {}

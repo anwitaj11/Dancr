@@ -9,6 +9,8 @@ import Practice from './pages/Practice.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Remix from './pages/Remix.jsx'
 import EditSteps from './pages/EditSteps.jsx'
+import VoiceCoach from './components/VoiceCoach.jsx'
+import { CoachContextProvider } from './lib/coachContext.jsx'
 
 function Shell() {
   const [user, setUser] = useState(currentUser())
@@ -47,6 +49,7 @@ function Shell() {
           <Route path="/dashboard" element={<Navigate to="/profile" replace />} />
         </Routes>
       </main>
+      {!immersive && <VoiceCoach />}
       {!immersive && (
         <footer className="footer-band">
           Made with rhythm, glitter &amp; a little bit of internet magic ✦ {APP_NAME} 2016–forever
@@ -59,7 +62,9 @@ function Shell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Shell />
+      <CoachContextProvider>
+        <Shell />
+      </CoachContextProvider>
     </BrowserRouter>
   )
 }

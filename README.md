@@ -54,6 +54,8 @@ cd frontend && npm test         # angles, scoring, timing, steps, remix
 
 The data format is in [`docs/dance-format.md`](docs/dance-format.md).
 
+The 🎙️ voice coach (ElevenLabs agent) setup is in [`docs/voice-coach.md`](docs/voice-coach.md).
+
 ## API
 
 | Method | Path | What it does |
@@ -70,6 +72,7 @@ The data format is in [`docs/dance-format.md`](docs/dance-format.md).
 | `POST` | `/report/{user}` | Strengths, weaknesses, and a plan; saved as the latest report |
 | `POST` | `/tts` | MP3 of the text, cached on disk (503 if no key, and the frontend falls back) |
 | `POST` | `/tts/pregenerate` | Pre-generates "5, 6, 7, 8!", "Nice!", and the other stock lines |
+| `GET` | `/voice-agent/session` | How the browser connects to the Dancr Coach voice agent (a short-lived token; never the API key) |
 | `POST` | `/remix` | Turns a preset name or a free-text request into remix settings plus an explanation |
 
 ## Still to do

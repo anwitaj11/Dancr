@@ -6,7 +6,11 @@ async function request(path, { method = 'GET', body } = {}) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`)
+  if (!res.ok) {
+    // Prefer the backend's own explanation (FastAPI sends { detail }).
+    const detail = await res.json().then((b) => b?.detail).catch(() => null)
+    throw new Error(typeof detail === 'string' ? detail : `${method} ${path} failed: ${res.status}`)
+  }
   return res
 }
 
@@ -30,6 +34,7 @@ export const api = {
       .then((r) => { if (!r.ok) throw new Error(`video upload failed: ${r.status}`) }),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
+  voiceSession: () => json('/voice-agent/session'),
 }
 
 export function currentUser() {

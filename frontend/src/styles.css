@@ -449,6 +449,28 @@ main.immersive { padding: 0; }
 .empty-library { max-width: 520px; margin: 0 auto; text-align: center; background: #fff; border: var(--border); box-shadow: var(--shadow); padding: 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .empty-library p { margin: 0; font-weight: 500; }
 
+/* voice coach (ElevenLabs agent) */
+.voice-coach { position: fixed; right: 18px; bottom: 18px; z-index: 45; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.coach-fab {
+  display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 99px; cursor: pointer;
+  background: var(--yellow); border: var(--border); box-shadow: var(--shadow-sm); font-size: 1.3rem; font-weight: 900;
+}
+.coach-fab span { font-family: var(--script); font-size: 1.3rem; }
+.coach-fab:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow); }
+.coach-win { width: min(380px, calc(100vw - 36px)); }
+.coach-loading { padding: 14px; background: #fff; border: var(--border); box-shadow: var(--shadow-sm); }
+.coach-win .win-body { display: flex; flex-direction: column; gap: 12px; background: var(--cream); }
+.coach-status { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 700; font-size: 0.8rem; }
+.coach-dot { width: 12px; height: 12px; border-radius: 50%; background: #bbb; border: 2px solid var(--ink); }
+.coach-status.listening .coach-dot { background: var(--lime); animation: blink 1.2s infinite; }
+.coach-status.speaking .coach-dot { background: var(--hot); animation: blink 0.5s infinite; }
+.coach-intro { margin: 0; line-height: 1.5; }
+.coach-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.coach-lines li { padding: 8px 12px; border: 2px solid var(--ink); border-radius: 14px; font-size: 0.9rem; line-height: 1.4; }
+.coach-lines li.agent { background: var(--yellow); border-bottom-left-radius: 4px; align-self: flex-start; }
+.coach-lines li.user { background: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
+.coach-error { margin: 0; padding: 10px 12px; background: #ffe3ea; border: 2px solid var(--warn); font-weight: 700; font-size: 0.85rem; line-height: 1.4; }
+
 /* ---------- calibration ---------- */
 .calibrate { position: relative; height: 100dvh; background: #000; }
 .calib-cam { position: absolute; inset: 0; overflow: hidden; }

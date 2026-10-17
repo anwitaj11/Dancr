@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import { ratingFor } from '../lib/scoring.js'
+import { useCoachSummary } from '../lib/coachContext.jsx'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
 import { APP_NAME, Headline, Marquee, Polaroid, Sticker, Win } from '../components/Retro.jsx'
 
@@ -42,7 +43,7 @@ function ProfileSidebar({ dances, user }) {
       <div className="myspace-row yellow">MOOD: iconic</div>
       <div className="myspace-label">♫ now playing:</div>
       <div className="myspace-row white">{featured ? featured.name : 'nothing yet'} — @{user}</div>
-      <div className="myspace-label">TOP {Math.min(8, dances.length)} DANCE BFFS</div>
+      {dances.length > 0 && <div className="myspace-label">TOP {Math.min(8, dances.length)} DANCE BFFS</div>}
       <div className="top8">
         {dances.slice(0, 8).map((d, i) => (
           <Link key={d.id} to={`/practice/${d.id}`} title={d.name}><DancePreview summary={d} i={i} small /></Link>
@@ -81,6 +82,9 @@ export default function Library() {
   }, [user])
 
   const list = dances ?? []
+  useCoachSummary(list.length
+    ? `The dancer (@${user}) is browsing the Dancr library. Dances available: ${list.map((d) => `${d.name} (${d.steps} steps, ${Math.round(d.bpm)} BPM)`).join(', ')}.`
+    : `The dancer (@${user}) is on the Dancr home page; the library is empty so far.`)
   const featured = list.find((d) => d.hasVideo) ?? list[0]
   const second = list.find((d) => d !== featured && d.hasVideo) ?? list.find((d) => d !== featured)
   const lastScore = profile?.history?.at(-1)?.avg

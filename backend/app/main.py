@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
-from . import coach, learner, remix, tts  # noqa: E402
+from . import coach, learner, remix, tts, voice_agent  # noqa: E402
 from .db import get_or_create_user, init_db, loads, session  # noqa: E402
 
 
@@ -264,6 +264,15 @@ def pregenerate_tts():
 @app.post("/remix")
 def make_remix(body: RemixIn):
     return remix.remix(body.request)
+
+
+@app.get("/voice-agent/session")
+def voice_agent_session():
+    """What the browser needs to start a Dancr Coach voice conversation. Never includes the API key."""
+    try:
+        return voice_agent.session()
+    except voice_agent.VoiceAgentError as e:
+        raise HTTPException(e.status, e.message)
 
 
 @app.get("/health")

@@ -84,6 +84,43 @@ def test_full_flow():
         assert client.post("/remix", json={"request": "chill"}).json()["speed"] == 0.5
 
 
+def test_voice_agent_session(monkeypatch):
+    from app import voice_agent
+
+    with TestClient(app) as client:
+        monkeypatch.delenv("ELEVENLABS_AGENT_ID", raising=False)
+        assert client.get("/voice-agent/session").status_code == 503
+
+        # No key: public agent, browser connects with the Agent ID only.
+        monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_test")
+        assert client.get("/voice-agent/session").json() == {"mode": "public", "agentId": "agent_test"}
+
+        # With a key: the backend fetches a short-lived token; the key never leaves the server.
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_secret")
+        seen = {}
+
+        class FakeResponse:
+            def __init__(self, status, body):
+                self.status_code, self._body = status, body
+
+            def json(self):
+                return self._body
+
+        def fake_get(url, params, headers, timeout):
+            seen.update(url=url, params=params, headers=headers)
+            return FakeResponse(200, {"token": "tok_123"})
+
+        monkeypatch.setattr(voice_agent.httpx, "get", fake_get)
+        body = client.get("/voice-agent/session").json()
+        assert body == {"mode": "private", "agentId": "agent_test", "conversationToken": "tok_123"}
+        assert "sk_secret" not in str(body)
+        assert seen["params"] == {"agent_id": "agent_test"} and seen["headers"]["xi-api-key"] == "sk_secret"
+
+        monkeypatch.setattr(voice_agent.httpx, "get", lambda *a, **k: FakeResponse(401, {}))
+        r = client.get("/voice-agent/session")
+        assert r.status_code == 502 and "rejected the API key" in r.json()["detail"]
+
+
 def test_skill_ema():
     s = learner.update_skills({}, {"leftElbow": 1.0})
     s = learner.update_skills(s, {"leftElbow": 0.0})

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 CACHE_DIR = Path(os.getenv("DABLAB_AUDIO_CACHE", Path(__file__).parent.parent / "audio_cache"))
-VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # "Rachel" premade voice
+VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "uYXf8XasLslADfZ2MB4u")  # same voice as the Dancr Coach agent
 MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_turbo_v2_5")
 
 STOCK_LINES = ["5, 6, 7, 8!", "Nice!", "Let's go!", "Step complete!", "You nailed it!"]

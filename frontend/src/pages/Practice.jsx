@@ -14,6 +14,7 @@ import VineRecorder from '../components/VineRecorder.jsx'
 import SpeedPicker, { formatSpeed, nearestSpeed } from '../components/SpeedPicker.jsx'
 import RailButton from '../components/RailButton.jsx'
 import { isCalibrated } from './Calibrate.jsx'
+import { useCoachContext, useCoachSummary } from '../lib/coachContext.jsx'
 import { APP_NAME, Headline, Polaroid, Win } from '../components/Retro.jsx'
 
 const COUNT_IN_BEATS = 4
@@ -103,6 +104,7 @@ export default function Practice() {
   const [result, setResult] = useState(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [tip, setTip] = useState(null)
+  const voiceCoach = useCoachContext()
   const [celebrate, setCelebrate] = useState(null) // step | dance
 
   const canvasRef = useRef(null)
@@ -234,7 +236,7 @@ export default function Practice() {
       try {
         const { tip: text } = await api.coachTip(user, context)
         setTip(text)
-        say(text)
+        if (!voiceCoach?.voiceActive) say(text) // don't talk over the voice coach
       } catch {
         setTip(null)
       }
@@ -328,6 +330,19 @@ export default function Practice() {
       if (t >= chunk.end) finishLoop()
     }
   })
+
+  // What the Dancr Coach voice agent is told: only things Dancr actually measured.
+  useCoachSummary(dance && chunk ? [
+    `The dancer (@${user}) is practicing "${dance.name}" (${Math.round(dance.bpm)} BPM),`,
+    `${chunk.label} of ${chunks.length}, at ${speed}x speed${mirror ? ', mirrored' : ''}.`,
+    result
+      ? `Their last try on this step was rated ${ratingFor(result.overall).label}; weakest joint: ${LABELS[result.weakestJoint]};`
+        + ` lowest-rated count: ${result.worstCount}; timing: ${timingLabel(result.timingOffset)}.`
+        + ` Body parts: ${Object.entries(partScores(result.joints)).map(([p, v]) => `${p} ${ratingFor(v).label}`).join(', ')}.`
+      : 'They have not finished a try on this step yet.',
+    profile?.patterns?.length ? `Learning patterns Dancr noticed: ${profile.patterns.map((p) => `${p.label} (${p.detail})`).join('; ')}.` : '',
+    tip ? `Dancr's last written tip: "${tip}"` : '',
+  ].filter(Boolean).join(' ') : '')
 
   if (!isCalibrated()) return <Navigate to={`/calibrate?next=/practice/${id}`} replace />
   if (!dance) return <div className="page-loading"><div className="spinner" /></div>
