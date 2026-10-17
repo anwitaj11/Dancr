@@ -16,11 +16,21 @@ export async function say(text, { volume = 1 } = {}) {
     cache.delete(text)
     if ('speechSynthesis' in window) {
       const u = new SpeechSynthesisUtterance(text)
+      // Always English, even when the computer's own language is something else.
+      u.lang = 'en-US'
+      u.voice = englishVoice()
       u.volume = volume
       u.rate = 1.1
       speechSynthesis.speak(u)
     }
   }
+}
+
+function englishVoice() {
+  const voices = speechSynthesis.getVoices()
+  return voices.find((v) => v.lang === 'en-US' && v.localService)
+    ?? voices.find((v) => v.lang?.startsWith('en'))
+    ?? null
 }
 
 /** Short metronome click. Accented on count 1; louder in rhythm mode. */

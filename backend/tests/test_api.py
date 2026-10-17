@@ -44,6 +44,13 @@ def test_full_flow():
         assert client.put(f"/dances/{dance_id}/video", content=b"fakemp4", headers={"content-type": "video/mp4"}).status_code == 200
         assert client.get(f"/dances/{dance_id}").json()["hasVideo"] is True
         assert client.get(f"/dances/{dance_id}/video").content == b"fakemp4"
+        assert client.get("/dances").json()[0]["hasVideo"] is True
+
+        new = {"name": "Real Dab", "bpm": 96, "data": {**DANCE["data"], "fps": 24}}
+        assert client.put(f"/dances/{dance_id}", json=new).status_code == 200
+        replaced = client.get(f"/dances/{dance_id}").json()
+        assert (replaced["name"], replaced["bpm"], replaced["data"]["fps"]) == ("Real Dab", 96, 24)
+        assert client.put("/dances/999", json=new).status_code == 404
 
         # five weak, late tries on one step → slow + timing + legs detail drill
         for _ in range(5):

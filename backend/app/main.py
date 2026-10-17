@@ -95,8 +95,27 @@ def list_dances():
             "id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
             "difficulty": r["difficulty"], "steps": len(data.get("steps", [])),
             "duration": data["frames"][-1]["t"] if data.get("frames") else 0,
+            "hasVideo": _video_path(r["id"]) is not None,
         })
     return out
+
+
+class DanceUpdate(BaseModel):
+    name: str
+    bpm: float
+    data: dict
+
+
+@app.put("/dances/{dance_id}")
+def replace_dance(dance_id: int, dance: DanceUpdate):
+    """Swap in a new recording for an existing dance (e.g. a placeholder built-in),
+    keeping its id, library slot, difficulty and everyone's attempt history."""
+    with session() as conn:
+        cur = conn.execute("UPDATE dances SET name = ?, bpm = ?, data = ? WHERE id = ?",
+                           (dance.name, dance.bpm, json.dumps(dance.data), dance_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "dance not found")
+    return {"id": dance_id}
 
 
 @app.get("/dances/{dance_id}")

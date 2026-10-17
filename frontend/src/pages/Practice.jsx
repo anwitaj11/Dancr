@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import { AngleSmoother, bodyInFrame, computeAngles } from '../lib/angles.js'
 import { BODY_PARTS, JOINT_NAMES, LABELS, P } from '../lib/joints.js'
@@ -14,9 +14,13 @@ import VineRecorder from '../components/VineRecorder.jsx'
 import SpeedPicker, { formatSpeed, nearestSpeed } from '../components/SpeedPicker.jsx'
 import RailButton from '../components/RailButton.jsx'
 import { isCalibrated } from './Calibrate.jsx'
+import { APP_NAME, Headline, Polaroid, Win } from '../components/Retro.jsx'
 
 const COUNT_IN_BEATS = 4
 const PART_ICONS = { arms: '💪', torso: '🧍', legs: '🦵' }
+const LEVELS = ['Beginner', 'Beginner', 'Intermediate', 'Advanced']
+const SEGMENT_COLORS = ['pink', 'cyan', 'yellow', 'pink', 'cyan', 'yellow']
+const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 const SKELETON_KEY = 'dablab.skeleton'
 
 function loadSkeletonPref() {
@@ -59,7 +63,6 @@ function ScoreRing({ value }) {
 
 export default function Practice() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const user = currentUser()
   const [dance, setDance] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -72,6 +75,7 @@ export default function Practice() {
   const [drillOn, setDrillOn] = useState(false)
   const [skeletonOn, setSkeletonOn] = useState(loadSkeletonPref)
   const [hasVideo, setHasVideo] = useState(false)
+  const [difficulty, setDifficulty] = useState(1)
   const [phase, setPhase] = useState('idle') // idle | countin | dancing | results
   const [countIn, setCountIn] = useState(null)
   const [live, setLive] = useState(null)
@@ -83,6 +87,7 @@ export default function Practice() {
 
   const canvasRef = useRef(null)
   const progressRef = useRef(null)
+  const timeRef = useRef(null)
   const clock = useRef({ phase: 'idle', t0: 0 })
   const smoother = useRef(new AngleSmoother(4))
   const stats = useRef(new LoopStats())
@@ -92,7 +97,7 @@ export default function Practice() {
   const timers = useRef([])
 
   useEffect(() => {
-    api.getDance(id).then((d) => { setDance(d.data); setHasVideo(d.hasVideo) })
+    api.getDance(id).then((d) => { setDance(d.data); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
     api.getProfile(user).then((p) => {
       setProfile(p)
       setChunkCounts(p.adaptations.chunkCounts)
@@ -249,20 +254,23 @@ export default function Practice() {
         setLive({ overall: match.overall, offset: match.offset, count, parts: partScores(match.joints) })
       }
       // Burn the score into the frame so it shows up in Vine recordings.
-      ctx.font = `800 ${Math.round(canvas.height / 14)}px Montserrat, system-ui`
+      ctx.font = `900 ${Math.round(canvas.height / 14)}px 'DM Sans', system-ui`
       ctx.fillStyle = colorFor(match.overall)
       ctx.fillText(`${Math.round(match.overall * 100)}%`, 16, canvas.height - 20)
     } else {
       setOutOfFrame(true)
     }
-    ctx.font = `italic ${Math.round(canvas.height / 26)}px "Grand Hotel", cursive`
-    ctx.fillStyle = '#ffffffcc'
-    ctx.fillText('Dab Lab', canvas.width - ctx.measureText('Dab Lab').width - 14, 32)
+    ctx.font = `700 ${Math.round(canvas.height / 22)}px Caveat, cursive`
+    ctx.fillStyle = '#ffffffdd'
+    ctx.fillText(APP_NAME, canvas.width - ctx.measureText(APP_NAME).width - 14, 34)
 
     if (dancing) {
       const t = refTime()
       if (progressRef.current) {
         progressRef.current.style.width = `${Math.min(100, ((t - chunk.start) / (chunk.end - chunk.start)) * 100)}%`
+      }
+      if (timeRef.current) {
+        timeRef.current.textContent = `${fmtTime(Math.max(0, t - chunk.start))} / ${fmtTime(chunk.end - chunk.start)}`
       }
       const count = countAt(t, dance.bpm, dance.countStart)
       if (count !== lastCount.current) {
@@ -274,147 +282,206 @@ export default function Practice() {
   })
 
   if (!isCalibrated()) return <Navigate to={`/calibrate?next=/practice/${id}`} replace />
-  if (!dance) return <div className="duet-loading"><div className="spinner" /></div>
+  if (!dance) return <div className="page-loading"><div className="spinner" /></div>
 
   const patterns = profile?.patterns ?? []
   const ringValue = live?.overall ?? result?.overall ?? 0
+  const totalTime = dance.frames.at(-1).t
+  const levelName = LEVELS[difficulty] ?? 'Advanced'
+
+  // Cheat-sheet pointers come from this dancer's real data when we have it.
+  const pointers = []
+  if (result?.weakestJoint) pointers.push(`Watch your ${LABELS[result.weakestJoint]}: it scored lowest last try`)
+  if (result && timingLabel(result.timingOffset) !== 'on beat') pointers.push(`You were a little ${timingLabel(result.timingOffset)}, lock in on count 1`)
+  if (drill) pointers.push(`Drill mode can focus scoring on your ${drill.part}`)
+  for (const fallback of ['Start in your ready pose, full body in frame', 'Follow the tutorial’s arms with your eyes', 'Hit the beat on count 1']) {
+    if (pointers.length < 3) pointers.push(fallback)
+  }
 
   return (
-    <section className="duet-screen">
-      {/* Story-style progress: one segment per step */}
-      <div className="story-bars">
-        {chunks.map((c, i) => (
-          <button key={i} className="story-seg" disabled={i > unlocked || busy} onClick={() => pickChunk(i)}
-            aria-label={`${c.label}${i > unlocked ? ' (locked)' : ''}`}>
-            <span className="seg-fill" ref={i === chunkIdx ? progressRef : undefined}
-              style={{ width: i < unlocked ? '100%' : i === chunkIdx ? undefined : '0%' }} />
-          </button>
-        ))}
+    <section className="practice-page grid-bg sunny">
+      <div className="ticker-strip">
+        <span>{APP_NAME.toUpperCase()} VIDEO TUTORIAL NETWORK™</span>
+        <span>★ {chunks.length} {chunks.length === 1 ? 'STEP' : 'STEPS'} ★ {Math.round(dance.bpm)} BPM ★ @{user.toUpperCase()} IS PRACTICING</span>
       </div>
 
-      <header className="duet-top">
-        <button className="icon-btn" onClick={() => navigate('/')} aria-label="Back to library">✕</button>
-        <div className="duet-title">
-          <b>{dance.name}</b>
-          <span className="marquee"><span>♫ {chunk?.label} · {Math.round(dance.bpm)} BPM · {formatSpeed(speed)} · {chunks.length} steps · ♫ {dance.name}</span></span>
+      <div className="practice-head">
+        <div>
+          <Link to="/" className="now-watching">◀ BACK // ▶ NOW WATCHING // YOUR TUTORIAL IS READY</Link>
+          <Headline lines={[[dance.name.toUpperCase()]]} size="lg" />
+          <span className="tag tag-pink">{chunks.length} {chunks.length === 1 ? 'STEP' : 'STEPS'} · {levelName.toUpperCase()} · {fmtTime(totalTime)}</span>
         </div>
-        <span className="step-chip">{chunkIdx + 1}/{chunks.length}</span>
-      </header>
+        {profile?.badge && <span className="badge-pill">{profile.badge.emoji} {profile.badge.label} ♡</span>}
+      </div>
 
       {(patterns.length > 0 || adapt?.suggestBreak) && (
         <div className="pattern-chips">
-          {patterns.map((p) => <span key={p.id} className="glass-chip">{p.emoji} {p.label}</span>)}
-          {adapt?.suggestBreak && <span className="glass-chip">📉 Take a short break</span>}
+          {patterns.map((p) => <span key={p.id} className="tag tag-white">{p.emoji} {p.label}</span>)}
+          {adapt?.suggestBreak && <span className="tag tag-white">📉 Take a short break</span>}
         </div>
       )}
 
-      <div className="duet">
-        <div className="duet-half tutorial">
-          {hasVideo ? (
-            <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
-              speed={speed} playing={phase === 'dancing'} mirror={mirror} className="fill" />
-          ) : (
-            <SkeletonPlayer dance={dance} getTime={refTime} mirror={mirror} width={360} height={480}
-              highlight={drillOn ? drill?.joint : undefined} className="fill" />
-          )}
-          <span className="half-tag">Tutorial{mirror ? ' · mirrored' : ''}</span>
-        </div>
-
-        <div className="duet-half you">
-          <video ref={videoRef} playsInline muted className="hidden-video" />
-          <canvas ref={canvasRef} className="fill" />
-          <span className="half-tag">@{user}</span>
-          <button className={`skeleton-toggle ${skeletonOn ? 'on' : ''}`} aria-pressed={skeletonOn}
-            title="Show limbs that don't match the tutorial"
-            onClick={() => setSkeletonOn((on) => { saveSkeletonPref(!on); return !on })}>
-            🦴 Skeleton: {skeletonOn ? 'ON' : 'OFF'}
-          </button>
-          {phase === 'dancing' && live && (
-            <>
-              <ScoreRing value={ringValue} />
-              <span className={`beat-count ${loud ? 'loud' : ''}`}>{live.count}</span>
-              <span className={`timing-tag ${timingLabel(live.offset).replace(' ', '-')}`}>{timingLabel(live.offset)}</span>
-              <div className="part-pills">
-                {Object.entries(live.parts).map(([part, v]) => (
-                  <span key={part} className="part-pill" style={{ '--c': colorFor(v) }}>{PART_ICONS[part]} {part}</span>
-                ))}
+      <div className="practice-grid">
+        <div className="player-col">
+          <Win title={`STEP_SYNC_PLAYER_v4.16 · ${chunk?.label ?? ''}`} extra={<span className="win-res">LIVE ●</span>} className="player-win">
+            <div className="duet">
+              <div className="duet-half tutorial">
+                {hasVideo ? (
+                  <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
+                    speed={speed} playing={phase === 'dancing'} mirror={mirror} className="fill" />
+                ) : (
+                  <SkeletonPlayer dance={dance} getTime={refTime} mirror={mirror} width={360} height={480}
+                    color="#ff3ea5" highlight={drillOn ? drill?.joint : undefined} className="fill" />
+                )}
+                <span className="step-flag">STEP {chunkIdx + 1}</span>
+                <span className="half-note">watch the arms! ↖</span>
               </div>
-            </>
+
+              <div className="duet-half you">
+                <video ref={videoRef} playsInline muted className="hidden-video" />
+                <canvas ref={canvasRef} className="fill" />
+                <span className="half-tag">@{user}</span>
+                <button className={`skeleton-toggle ${skeletonOn ? 'on' : ''}`} aria-pressed={skeletonOn}
+                  title="Show limbs that don't match the tutorial"
+                  onClick={() => setSkeletonOn((on) => { saveSkeletonPref(!on); return !on })}>
+                  🦴 Skeleton: {skeletonOn ? 'ON' : 'OFF'}
+                </button>
+                {phase === 'dancing' && live && (
+                  <>
+                    <ScoreRing value={ringValue} />
+                    <span className={`beat-count ${loud ? 'loud' : ''}`}>{live.count}</span>
+                    <span className={`timing-tag ${timingLabel(live.offset).replace(' ', '-')}`}>{timingLabel(live.offset)}</span>
+                    <div className="part-pills">
+                      {Object.entries(live.parts).map(([part, v]) => (
+                        <span key={part} className="part-pill" style={{ '--c': colorFor(v) }}>{PART_ICONS[part]} {part}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {countIn && <div className="countin" key={countIn}>{countIn}</div>}
+                {outOfFrame && phase !== 'idle' && <div className="frame-warn">Step back so your whole body is in the frame</div>}
+                {status === 'starting' && <div className="cam-status"><div className="spinner" /> Starting camera…</div>}
+                {error && <div className="cam-status warn">{error}</div>}
+              </div>
+            </div>
+
+            <div className="player-controls">
+              <button className={`round-btn play ${busy ? 'live' : ''}`} onClick={busy ? stop : start} disabled={!chunk}
+                aria-label={busy ? 'Stop' : 'Start dancing'}>{busy ? '■' : '▶'}</button>
+              <div className="scrub"><span className="scrub-fill" ref={progressRef} /></div>
+              <span className="scrub-time" ref={timeRef}>00:00 / {fmtTime(chunk ? chunk.end - chunk.start : 0)}</span>
+              <span aria-hidden="true">♫</span>
+            </div>
+            <div className="control-rail">
+              <SpeedPicker speed={speed} onChange={setSpeed} disabled={busy} />
+              <RailButton icon="🪞" label="Mirror" active={mirror} onClick={() => setMirror((m) => !m)} />
+              <RailButton icon="🔁" label="Loop" active={loop} onClick={() => setLoop((l) => !l)} />
+              {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
+              <RailButton icon={<span className="speed-icon">{chunkCounts}</span>} label="Counts" disabled={busy}
+                onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setUnlocked(0) }} />
+              <VineRecorder canvasRef={canvasRef} name={dance.name.toLowerCase().replace(/\W+/g, '-')} />
+            </div>
+            <div className="segments">
+              {chunks.map((c, i) => (
+                <button key={i} className={`segment seg-${SEGMENT_COLORS[i % SEGMENT_COLORS.length]} ${i === chunkIdx ? 'on' : ''}`}
+                  disabled={i > unlocked || busy} onClick={() => pickChunk(i)}>
+                  {i > unlocked ? '🔒 ' : i < unlocked ? '✓ ' : ''}{c.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </Win>
+
+          <div className="step-polaroids">
+            {chunks.map((c, i) => (
+              <button key={i} className="polaroid-btn" disabled={i > unlocked || busy} onClick={() => pickChunk(i)}>
+                <Polaroid caption={c.label.toLowerCase()} badge={i + 1} tilt={i % 2 ? 1.5 : -1.5} active={i === chunkIdx}>
+                  {hasVideo ? (
+                    <video src={`${api.videoUrl(id)}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
+                  ) : (
+                    <SkeletonPlayer dance={dance} start={c.start} end={c.end} width={160} height={160} color="#ff3ea5" glow={6} lineWidth={5} className="fill" />
+                  )}
+                  {i > unlocked && <span className="lock">🔒</span>}
+                </Polaroid>
+                {i === chunkIdx && <span className="here-sticker">you're here!</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Win title="CHEAT_SHEET.txt — NOTEPAD" color="purple" controls={false} className="notepad">
+          <span className="script pink">pssst... the details ↓</span>
+          <h2 className="notepad-title">the choreo cheat sheet</h2>
+          <hr />
+          <span className="tag tag-lilac">STEP {chunkIdx + 1} OF {chunks.length}</span>
+          <h3 className="notepad-step">{chunk?.label.toLowerCase()}</h3>
+          <p className="notepad-text">
+            {tip ?? `Watch the tutorial, then hit practice. Score ${PASS_SCORE * 100}% to unlock the next step. Your coach will chime in if you get stuck.`}
+          </p>
+          {result && (
+            <div className="last-try" onClick={() => setSheetOpen(true)}>
+              <ScoreRing value={result.overall} />
+              <div><b>last try: {Math.round(result.overall * 100)}%</b><span>{result.passed ? 'passed! 🔥' : 'tap for details'}</span></div>
+            </div>
           )}
-          {countIn && <div className="countin" key={countIn}>{countIn}</div>}
-          {outOfFrame && phase !== 'idle' && <div className="frame-warn">Step back so your whole body is in the frame</div>}
-          {status === 'starting' && <div className="cam-status"><div className="spinner" /> Starting camera…</div>}
-          {error && <div className="cam-status warn">{error}</div>}
-        </div>
-
-        <div className="rail">
-          <SpeedPicker speed={speed} onChange={setSpeed} disabled={busy} />
-          <RailButton icon="🪞" label="Mirror" active={mirror} onClick={() => setMirror((m) => !m)} />
-          <RailButton icon="🔁" label="Loop" active={loop} onClick={() => setLoop((l) => !l)} />
-          {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
-          <RailButton icon={<span className="speed-icon">{chunkCounts}</span>} label="Counts" disabled={busy}
-            onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setUnlocked(0) }} />
-          <VineRecorder canvasRef={canvasRef} name={dance.name.toLowerCase().replace(/\W+/g, '-')} />
-        </div>
+          <hr />
+          <ol className="pointers">
+            {pointers.slice(0, 3).map((t, i) => <li key={i}><span>{String(i + 1).padStart(2, '0')}</span>{t}</li>)}
+          </ol>
+          <button className="btn-teal wide" onClick={busy ? stop : start} disabled={!chunk}>
+            {busy ? 'stop ■' : phase === 'results' ? 'practice it again →' : 'practice this move →'}
+          </button>
+          <span className="script pink center">you've totally got this ♡</span>
+        </Win>
       </div>
-
-      <footer className="duet-bottom">
-        <div className="caption">
-          <b>@{user}</b> learning <b>{dance.name}</b> {result && <button className="link" onClick={() => setSheetOpen(true)}>· last try {Math.round(result.overall * 100)}%</button>}
-        </div>
-        <button className={`record-btn ${busy ? 'live' : ''}`} onClick={busy ? stop : start} disabled={!chunk}
-          aria-label={busy ? 'Stop' : 'Start dancing'}>
-          <span />
-        </button>
-        <div className="hint">{busy ? 'Tap to stop' : phase === 'results' ? 'Tap to go again' : 'Tap to dance'}</div>
-      </footer>
 
       {result && sheetOpen && (
         <div className="sheet-backdrop" onClick={() => setSheetOpen(false)}>
-          <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" />
-            <div className="sheet-head">
-              <ScoreRing value={result.overall} />
-              <div>
-                <h2>{result.passed ? 'Passed! 🔥' : 'So close!'}</h2>
-                <p className="muted">
-                  {result.passed ? 'Next step unlocked.' : `${PASS_SCORE * 100}% unlocks the next step`} · {timingLabel(result.timingOffset)}
-                  {' '}({result.timingOffset >= 0 ? '+' : ''}{result.timingOffset.toFixed(2)}s)
-                </p>
-              </div>
-            </div>
-            {tip && <p className="coach-bubble"><span>🎙️</span>{tip}</p>}
-            <div className="joint-grid">
-              {Object.entries(result.joints).map(([j, s]) => (
-                <div key={j} className="joint-row">
-                  <span>{LABELS[j]}</span>
-                  <div className="bar"><div style={{ width: `${s * 100}%`, background: colorFor(s) }} /></div>
-                  <b>{Math.round(s * 100)}</b>
+          <Win title="RESULTS.txt" color="pink" className="sheet" extra={
+            <button className="win-close" onClick={() => setSheetOpen(false)} aria-label="Close">×</button>} controls={false}>
+            <div onClick={(e) => e.stopPropagation()}>
+              <div className="sheet-head">
+                <ScoreRing value={result.overall} />
+                <div>
+                  <h2>{result.passed ? 'Passed! 🔥' : 'So close!'}</h2>
+                  <p className="muted">
+                    {result.passed ? 'Next step unlocked.' : `${PASS_SCORE * 100}% unlocks the next step`} · {timingLabel(result.timingOffset)}
+                    {' '}({result.timingOffset >= 0 ? '+' : ''}{result.timingOffset.toFixed(2)}s)
+                  </p>
                 </div>
-              ))}
+              </div>
+              {tip && <p className="coach-bubble"><span>🎙️</span>{tip}</p>}
+              <div className="joint-grid">
+                {Object.entries(result.joints).map(([j, s]) => (
+                  <div key={j} className="joint-row">
+                    <span>{LABELS[j]}</span>
+                    <div className="bar"><div style={{ width: `${s * 100}%`, background: colorFor(s) }} /></div>
+                    <b>{Math.round(s * 100)}</b>
+                  </div>
+                ))}
+              </div>
+              <div className="row center">
+                <button className="btn-teal" onClick={start}>try again →</button>
+                {result.passed && chunkIdx < chunks.length - 1 && (
+                  <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
+                )}
+              </div>
+              {loop && !result.passed && <p className="muted small center">Looping automatically…</p>}
             </div>
-            <div className="row center">
-              <button className="btn" onClick={start}>Try again</button>
-              {result.passed && chunkIdx < chunks.length - 1 && (
-                <button className="btn ghost" onClick={() => pickChunk(chunkIdx + 1)}>Next step →</button>
-              )}
-            </div>
-            {loop && !result.passed && <p className="muted small center">Looping automatically…</p>}
-          </div>
+          </Win>
         </div>
       )}
 
       {celebrate && (
-        <div className="celebrate" onClick={() => setCelebrate(null)}>
+        <div className="celebrate dots" onClick={() => setCelebrate(null)}>
           <div className="burst" aria-hidden="true">{'🔥💯👌✨🔥💯👌✨'.match(/\p{Extended_Pictographic}/gu).map((e, i) => <span key={i} style={{ '--i': i }}>{e}</span>)}</div>
-          <h1>{celebrate === 'dance' ? 'Dance complete' : 'Step complete'}</h1>
-          <p>{celebrate === 'dance' ? 'You learned the whole thing. Iconic.' : 'On to the next one!'}</p>
+          <Headline lines={celebrate === 'dance' ? [['DANCE'], ['COMPLETE!', 'yellow']] : [['STEP'], ['COMPLETE!', 'yellow']]} size="lg" as="h2" />
+          <p className="script big">{celebrate === 'dance' ? 'you learned the whole thing. iconic.' : 'on to the next one!'}</p>
           <div className="row center" onClick={(e) => e.stopPropagation()}>
             {celebrate === 'step' && chunkIdx < chunks.length - 1 && (
-              <button className="btn" onClick={() => pickChunk(chunkIdx + 1)}>Next step →</button>
+              <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>NEXT STEP →</button>
             )}
-            {celebrate === 'dance' && <Link className="btn" to="/profile">See your progress</Link>}
-            {celebrate === 'dance' && <Link className="btn ghost" to={`/remix/${id}`}>Remix it</Link>}
+            {celebrate === 'dance' && <Link className="btn-pink" to="/profile">SEE MY PROGRESS →</Link>}
+            {celebrate === 'dance' && <Link className="btn-bracket" to={`/remix/${id}`}>[ REMIX IT ]</Link>}
           </div>
         </div>
       )}

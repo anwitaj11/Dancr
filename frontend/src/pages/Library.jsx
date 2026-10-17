@@ -2,86 +2,158 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
+import { APP_NAME, Headline, Marquee, Polaroid, Sticker, Win } from '../components/Retro.jsx'
 
-const TILE_COLORS = ['#25f4ee', '#fe2c55', '#ffd166', '#b388ff', '#7cff6b']
+const FIGURE_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#7b3dff', '#00b3a4']
+const LEVELS = ['Beginner', 'Beginner', 'Intermediate', 'Advanced']
+const TILTS = [-2, 1.5, -1, 2, -1.5, 1]
 
-function useDance(id) {
+/** Stick-figure data, fetched only for dances that have no real video yet. */
+function useDance(summary) {
   const [dance, setDance] = useState(null)
   useEffect(() => {
-    api.getDance(id).then((d) => setDance(d.data)).catch(() => {})
-  }, [id])
+    if (!summary || summary.hasVideo) return
+    api.getDance(summary.id).then((d) => setDance(d.data)).catch(() => {})
+  }, [summary?.id, summary?.hasVideo])
   return dance
 }
 
-function Story({ summary, i }) {
-  const dance = useDance(summary.id)
-  return (
-    <Link to={`/practice/${summary.id}`} className="story">
-      <span className="story-ring">
-        <span className="story-inner">
-          {dance && <SkeletonPlayer dance={dance} end={Math.min(6, summary.duration)} width={120} height={120}
-            color={TILE_COLORS[i % TILE_COLORS.length]} glow={8} lineWidth={5} />}
-        </span>
-      </span>
-      <span className="story-name">{summary.name}</span>
-    </Link>
-  )
+/** A dance's real video on loop, or its neon demo figure until a video is added. */
+function DancePreview({ summary, i = 0, small = false }) {
+  const dance = useDance(summary)
+  if (!summary) return <div className="preview-empty">✦</div>
+  if (summary.hasVideo) {
+    return <video src={api.videoUrl(summary.id)} className="fill cover" autoPlay loop muted playsInline preload="metadata" />
+  }
+  return dance ? (
+    <SkeletonPlayer dance={dance} end={Math.min(6, summary.duration)} width={small ? 160 : 300} height={small ? 160 : 400}
+      color={FIGURE_COLORS[i % FIGURE_COLORS.length]} glow={small ? 6 : 12} lineWidth={small ? 5 : 7} className="fill" />
+  ) : <div className="preview-empty"><div className="spinner" /></div>
 }
 
-function Tile({ summary, i, unlocked }) {
-  const dance = useDance(summary.id)
+function ProfileSidebar({ dances, user }) {
+  const featured = dances[0]
   return (
-    <Link to={`/practice/${summary.id}`} className="tile">
-      {dance && <SkeletonPlayer dance={dance} end={Math.min(6, summary.duration)} width={270} height={480}
-        color={TILE_COLORS[i % TILE_COLORS.length]} className="fill" />}
-      <div className="tile-top">
-        {summary.difficulty >= 3 && unlocked && <span className="glass-chip">⚡ Unlocked</span>}
-        {!summary.builtin && <span className="glass-chip">Uploaded</span>}
+    <aside className="myspace">
+      <div className="myspace-title">★ {APP_NAME.toUpperCase()} ★</div>
+      <div className="myspace-photo"><DancePreview summary={featured} /></div>
+      <div className="myspace-row dark">STATUS: DANCING</div>
+      <div className="myspace-row yellow">MOOD: iconic</div>
+      <div className="myspace-label">♫ now playing:</div>
+      <div className="myspace-row white">{featured ? featured.name : 'nothing yet'} — @{user}</div>
+      <div className="myspace-label">TOP {Math.min(8, dances.length)} DANCE BFFS</div>
+      <div className="top8">
+        {dances.slice(0, 8).map((d, i) => (
+          <Link key={d.id} to={`/practice/${d.id}`} title={d.name}><DancePreview summary={d} i={i} small /></Link>
+        ))}
       </div>
-      <div className="tile-info">
-        <b>{summary.name}</b>
-        <span>♫ {Math.round(summary.bpm)} BPM · {summary.steps} steps</span>
-        <span className="stars">{'★'.repeat(summary.difficulty)}<i>{'★'.repeat(3 - Math.min(3, summary.difficulty))}</i></span>
-      </div>
-      <span className="tile-play">▶</span>
-    </Link>
+      <div className="checker" aria-hidden="true" />
+      <div className="myspace-foot">● online now</div>
+    </aside>
   )
 }
 
 export default function Library() {
+  const user = currentUser()
   const [dances, setDances] = useState(null)
   const [error, setError] = useState(null)
-  const [unlockHarder, setUnlockHarder] = useState(false)
+  const [profile, setProfile] = useState(null)
 
   useEffect(() => {
     api.listDances().then(setDances).catch((e) => setError(e.message))
-    api.getProfile(currentUser()).then((p) => setUnlockHarder(p.adaptations.unlockHarder)).catch(() => {})
-  }, [])
+    api.getProfile(user).then(setProfile).catch(() => {})
+  }, [user])
+
+  const list = dances ?? []
+  const featured = list.find((d) => d.hasVideo) ?? list[0]
+  const second = list.find((d) => d !== featured && d.hasVideo) ?? list.find((d) => d !== featured)
+  const lastScore = profile?.history?.at(-1)?.avg
+  const unlockHarder = profile?.adaptations?.unlockHarder
 
   return (
-    <section className="feed">
-      <div className="stories">
-        <Link to="/upload" className="story">
-          <span className="story-ring add"><span className="story-inner">＋</span></span>
-          <span className="story-name">Upload</span>
-        </Link>
-        {dances?.map((d, i) => <Story key={d.id} summary={d} i={i} />)}
-      </div>
+    <>
+      <section className="hero dots">
+        <ProfileSidebar dances={list} user={user} />
 
-      <div className="feed-head">
-        <h2>Trending in 2016 🔥</h2>
-        <span className="muted small">Tap a dance to learn it. Your webcam is the controller.</span>
-      </div>
+        <div className="hero-copy">
+          <Sticker color="yellow" tilt={-3}>● YOUR 24/7 DANCE BESTIE.exe</Sticker>
+          <Headline lines={[['LEARN'], ['THE'], ['DANCE.', 'yellow'], ['OWN THE'], ['INTERNET.', 'pink', true]]} />
+          <p className="hero-blurb">
+            Your favorite dances, broken down step by step. Practice with your own AI dance buddy and find your rhythm.
+          </p>
+          <div className="hero-actions">
+            <Link to="/upload" className="btn-pink">UPLOAD YOUR VIDEO ✦</Link>
+            <a href="#how" className="btn-bracket">[ HOW IT WORKS? ]</a>
+          </div>
+          {error && <p className="note-card warn">Can't reach the backend ({error}). Is it running on port 8000?</p>}
+        </div>
 
-      {error && <p className="notice warn">Can't reach the backend ({error}). Is it running on port 8000?</p>}
-      {dances && dances.length === 0 && (
-        <p className="notice">No dances yet. Run <code>npm run seed</code> in <code>frontend/</code>, or upload one.</p>
-      )}
-      {!dances && !error && <div className="spinner center-block" />}
+        <div className="hero-art">
+          <Win title={featured ? `${featured.name.toUpperCase().replace(/\W+/g, '_')}_FINAL.mp4` : 'FINAL.mp4'} className="hero-win">
+            <span className="star-burst" aria-hidden="true">★</span>
+            {featured ? <Link to={`/practice/${featured.id}`} className="hero-video"><DancePreview summary={featured} /></Link> : <div className="hero-video" />}
+            <div className="fake-scrub" aria-hidden="true"><span>▶</span><i /></div>
+          </Win>
+          {featured && (
+            <div className="now-playing">
+              <small>♫ NOW PLAYING</small>
+              <b>{featured.name}</b>
+              <span aria-hidden="true">|◀ ■ ▶|</span>
+            </div>
+          )}
+          <div className="speech">omg you're getting it!! ♡</div>
+          <div className="match-pill">{lastScore != null ? `${Math.round(lastScore * 100)}% MATCH!` : 'READY TO MATCH?'}</div>
+          <div className="msg-box"><b>NEW MESSAGE (1)</b><span>ur dance coach is ready!!!</span></div>
+          {second && (
+            <Link to={`/practice/${second.id}`} className="hero-polaroid">
+              <Polaroid caption={`practice clip #${String(second.id).padStart(2, '0')}`} tilt={4}>
+                <DancePreview summary={second} i={1} />
+              </Polaroid>
+            </Link>
+          )}
+        </div>
+      </section>
 
-      <div className="tiles">
-        {dances?.map((d, i) => <Tile key={d.id} summary={d} i={i} unlocked={unlockHarder} />)}
-      </div>
-    </section>
+      <Marquee text="YOUR NEW DANCE OBSESSION STARTS HERE" />
+
+      <section id="dances" className="dances grid-bg">
+        <p className="script center">pick ur obsession ↓</p>
+        <h2 className="section-title">the dance library</h2>
+        {list.some((d) => d.builtin && !d.hasVideo) && (
+          <Link to="/upload" className="note-card add-video">
+            🎥 Some dances are still demo stick figures. <b>Add the real video →</b>
+          </Link>
+        )}
+        {dances && dances.length === 0 && (
+          <p className="note-card">No dances yet. Run <code>npm run seed</code> in <code>frontend/</code>, or upload one.</p>
+        )}
+        {!dances && !error && <div className="spinner center-block" />}
+        <div className="polaroid-grid">
+          {list.map((d, i) => (
+            <Link key={d.id} to={`/practice/${d.id}`} className="dance-card">
+              <Polaroid caption={d.name} tilt={TILTS[i % TILTS.length]} badge={i + 1}>
+                <DancePreview summary={d} i={i} />
+              </Polaroid>
+              <div className="dance-meta">
+                <span className="tag tag-pink">{d.steps} {d.steps === 1 ? 'STEP' : 'STEPS'} · {LEVELS[d.difficulty] ?? 'Advanced'}</span>
+                <span className="tag tag-blue">♫ {Math.round(d.bpm)} BPM</span>
+                {!d.hasVideo && <span className="tag tag-ghost">demo figure</span>}
+                {d.difficulty >= 3 && unlockHarder && <span className="tag tag-lime">⚡ unlocked</span>}
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section id="how" className="how rainbow">
+        <p className="script center">it's literally this easy ↓</p>
+        <h2 className="section-title">from saved video to slay</h2>
+        <div className="how-cards">
+          <div className="how-card orange"><span className="how-num">01</span><span className="how-icon">📼</span><h3>upload it</h3><p>Drop in any dance clip you've been replaying 47 times.</p></div>
+          <div className="how-card lilac"><span className="how-num">02</span><span className="how-icon">✂️</span><h3>learn it</h3><p>We split the choreo into bite-size, replayable 8-counts.</p></div>
+          <div className="how-card teal"><span className="how-num">03</span><span className="how-icon">★</span><h3>get grooving</h3><p>Practice with live, friendly feedback from your AI dance bestie.</p></div>
+        </div>
+      </section>
+    </>
   )
 }

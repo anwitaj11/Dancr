@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { PRESETS, remixDance } from '../lib/remix.js'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
+import { Headline, Polaroid, Sticker } from '../components/Retro.jsx'
 
 export default function Remix() {
   const { id } = useParams()
@@ -37,11 +38,12 @@ export default function Remix() {
     navigate(`/practice/${newId}`)
   }
 
-  if (!dance) return <p className="muted">Loading…</p>
+  if (!dance) return <div className="page-loading"><div className="spinner" /></div>
 
   return (
-    <section className="narrow">
-      <h1>Remix {dance.name} 🎛️</h1>
+    <section className="remix-page grid-bg cool">
+      <Sticker color="lime" tilt={-2}>★ STYLE_REMIX.exe ★</Sticker>
+      <Headline lines={[['REMIX'], [dance.name.toUpperCase(), 'yellow']]} size="lg" />
       <div className="row wrap">
         {Object.entries(PRESETS).map(([key, p]) => (
           <button key={key} className={`chip ${label === p.label ? 'on' : ''}`}
@@ -52,14 +54,14 @@ export default function Remix() {
       </div>
       <div className="row">
         <input className="grow" value={request} onChange={(e) => setRequest(e.target.value)} placeholder='Or describe it: "make it more K-pop"' />
-        <button className="btn" onClick={ask} disabled={!request || busy}>{busy ? 'Thinking…' : '✨ Remix'}</button>
+        <button className="btn-pink" onClick={ask} disabled={!request || busy}>{busy ? 'Thinking…' : '✨ Remix'}</button>
       </div>
       {explanation && <p className="tip">🤖 {explanation}</p>}
       <div className="stage">
-        <div className="panel"><h3>Original</h3><SkeletonPlayer dance={dance} /></div>
-        {remixed && <div className="panel"><h3>{label}</h3><SkeletonPlayer dance={remixed} color="#fe2c55" /></div>}
+        <Polaroid caption="original" tilt={-2}><SkeletonPlayer dance={dance} color="#1f4bff" className="fill" /></Polaroid>
+        {remixed && <Polaroid caption={label.toLowerCase()} tilt={2}><SkeletonPlayer dance={remixed} color="#ff3ea5" className="fill" /></Polaroid>}
       </div>
-      {remixed && <button className="btn wide" onClick={practice}>💃 Practice this remix</button>}
+      {remixed && <button className="btn-teal wide" onClick={practice}>practice this remix →</button>}
     </section>
   )
 }

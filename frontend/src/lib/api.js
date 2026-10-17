@@ -15,6 +15,8 @@ const json = (path, opts) => request(path, opts).then((r) => r.json())
 export const api = {
   listDances: () => json('/dances'),
   getDance: (id) => json(`/dances/${id}`),
+  replaceDance: (id, dance) =>
+    json(`/dances/${id}`, { method: 'PUT', body: { name: dance.name, bpm: dance.bpm, data: dance } }),
   createDance: (dance, { builtin = false, difficulty = 1 } = {}) =>
     json('/dances', { method: 'POST', body: { name: dance.name, bpm: dance.bpm, builtin, difficulty, data: dance } }),
   saveAttempt: (attempt) => json('/attempts', { method: 'POST', body: attempt }),

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { currentUser, setCurrentUser } from './lib/api.js'
+import { APP_NAME, Logo } from './components/Retro.jsx'
 import Library from './pages/Library.jsx'
 import Upload from './pages/Upload.jsx'
 import Calibrate from './pages/Calibrate.jsx'
@@ -11,19 +12,26 @@ import Remix from './pages/Remix.jsx'
 function Shell() {
   const [user, setUser] = useState(currentUser())
   const { pathname } = useLocation()
-  // Practice and calibration are full-screen, like recording in Musical.ly.
-  const immersive = pathname.startsWith('/practice') || pathname.startsWith('/calibrate')
+  // Calibration is full-screen camera.
+  const immersive = pathname.startsWith('/calibrate')
 
   return (
     <>
       {!immersive && (
         <header className="topbar">
-          <NavLink to="/" className="logo">Dab Lab</NavLink>
-          <label className="user">
+          <Link to="/" aria-label={`${APP_NAME} home`}><Logo /></Link>
+          <nav className="topnav">
+            <NavLink to="/" end>Discover</NavLink>
+            <a href="/#how">How It Works</a>
+            <NavLink to="/upload">Upload</NavLink>
+            <NavLink to="/profile">My Practice</NavLink>
+          </nav>
+          <label className="user" title="Your username">
             <span>@</span>
             <input aria-label="Your username" value={user}
               onChange={(e) => { setUser(e.target.value); setCurrentUser(e.target.value || 'guest') }} />
           </label>
+          <a href="/#dances" className="cta">Let's Dance! <span aria-hidden="true">→</span></a>
         </header>
       )}
       <main key={user} className={immersive ? 'immersive' : ''}>
@@ -38,11 +46,9 @@ function Shell() {
         </Routes>
       </main>
       {!immersive && (
-        <nav className="tabbar">
-          <NavLink to="/" end aria-label="Home"><span>🏠</span>Home</NavLink>
-          <NavLink to="/upload" className="plus" aria-label="Upload a dance"><span>＋</span></NavLink>
-          <NavLink to="/profile" aria-label="Your profile"><span>👤</span>Me</NavLink>
-        </nav>
+        <footer className="footer-band">
+          Made with rhythm, glitter &amp; a little bit of internet magic ✦ {APP_NAME} 2016–forever
+        </footer>
       )}
     </>
   )
