@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { poseAt } from '../lib/people.js'
+import { containRect, drawDancerMarker } from '../lib/skeleton.js'
 
 const DRIFT = 0.15 // seconds before we hard-seek back into sync
 
@@ -8,9 +10,11 @@ const DRIFT = 0.15 // seconds before we hard-seek back into sync
  * re-based to the first detected pose when a dance is processed).
  * With muted={false} the clip's own music plays along; the browser keeps the
  * pitch natural at slower speeds.
+ * dancer: { frames, color, label } marks who to copy when the clip has several people.
  */
-export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, muted = true, volume = 1, className }) {
+export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, muted = true, volume = 1, className, dancer }) {
   const ref = useRef(null)
+  const marker = useRef(null)
 
   useEffect(() => {
     const video = ref.current
@@ -25,11 +29,12 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
         if (!video.paused) video.pause()
         if (Math.abs(video.currentTime - target) > 0.04) video.currentTime = target
       }
+      if (dancer && marker.current) drawMarker(marker.current, video, dancer, getTime(), mirror)
       raf = requestAnimationFrame(sync)
     }
     sync()
     return () => cancelAnimationFrame(raf)
-  }, [getTime, offset, speed, playing])
+  }, [getTime, offset, speed, playing, dancer, mirror])
 
   useEffect(() => {
     const video = ref.current
@@ -39,7 +44,19 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
   }, [muted, volume])
 
   return (
-    <video ref={ref} src={src} muted={muted} playsInline preload="auto" className={className}
-      style={mirror ? { transform: 'scaleX(-1)' } : undefined} />
+    <>
+      <video ref={ref} src={src} muted={muted} playsInline preload="auto" className={className}
+        style={mirror ? { transform: 'scaleX(-1)' } : undefined} />
+      {dancer && <canvas ref={marker} className="fill dancer-marker" />}
+    </>
   )
+}
+
+function drawMarker(canvas, video, { frames, color, label }, t, mirror) {
+  const w = canvas.clientWidth, h = canvas.clientHeight
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, w, h)
+  const pose = poseAt(frames, t)
+  if (pose) drawDancerMarker(ctx, pose, containRect(w, h, video.videoWidth, video.videoHeight), { color, label, mirror, lineWidth: 4 })
 }

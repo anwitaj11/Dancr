@@ -36,6 +36,12 @@ export default function Upload() {
     api.listDances().then(setLibrary).catch(() => {})
   }, [])
 
+  // Bring each new window (picker, check, step splitter) into view as it appears.
+  const stage = dance ? 'steps' : check ? 'check' : picking ? 'pick' : null
+  useEffect(() => {
+    if (stage) document.getElementById(`upload-${stage}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [stage])
+
   const replacing = library.find((d) => String(d.id) === String(replaceId))
 
   // Replacing a built-in: start from its name and tempo.
@@ -54,12 +60,9 @@ export default function Upload() {
     setProgress(0)
     try {
       const result = await processVideoFile(file, { onProgress: setProgress })
-      // More than one person: always ask who to learn from, then let them check it.
+      // More than one person: always ask who to learn from. Either way, show who we're following.
       if (result.people > 1) setPicking(result)
-      else {
-        const tracked = follow(result, 0)
-        if (tracked) build(result, tracked)
-      }
+      else choose(result, 0)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -77,7 +80,7 @@ export default function Upload() {
     return tracked
   }
 
-  /** Picked from several people: show who we're following so they can check it. */
+  /** Show who we're following so they can check it before the lesson is built. */
   function choose(result, person) {
     setError(null)
     const tracked = follow(result, person)
@@ -93,12 +96,15 @@ export default function Upload() {
   }
 
   /** Turn the followed dancer's moves into a lesson. */
-  function build(result, tracked) {
+  function build(result, tracked, person) {
     const { frames, trimmed } = rebase(tracked)
     setPicking(null)
     setCheck(null)
     setCrowd(result.people > 1 ? result : null)
     setDance(buildDance({
+      dancer: result.people > 1
+        ? { number: person + 1, people: result.people, color: PERSON_COLORS[person % PERSON_COLORS.length] }
+        : undefined,
       name: name || file.name.replace(/\.[^.]+$/, ''),
       bpm: Number(bpm),
       // Count 1 was marked in original video time; frames were re-based to the dancer's first frame.
@@ -195,7 +201,7 @@ export default function Upload() {
       </Win>
 
       {picking && (
-        <Win title="WHO_ARE_WE_LEARNING_FROM.jpg" color="purple" className="upload-win">
+        <Win id="upload-pick" title="WHO_ARE_WE_LEARNING_FROM.jpg" color="purple" className="upload-win">
           <p className="script pink">we spotted {picking.people} people ↓</p>
           <h2 className="section-title small">Who are we learning from?</h2>
           <p className="muted">Pick the dancer to copy. We'll follow just them through the whole video.</p>
@@ -211,36 +217,44 @@ export default function Upload() {
       )}
 
       {check && (
-        <Win title="CHECK_YOUR_DANCER.exe" color="lime" className="upload-win">
+        <Win id="upload-check" title="CHECK_YOUR_DANCER.exe" color="lime" className="upload-win">
           <p className="script pink">quick check ↓</p>
-          <h2 className="section-title small">Is this who you want to learn from?</h2>
+          <h2 className="section-title small">
+            {check.result.people > 1 ? `You picked Dancer ${check.person + 1}. Is this who you want to learn from?` : 'Is this the dancer you want to learn from?'}
+          </h2>
           <p className="muted">
-            Press play: Dancer {check.person + 1} is drawn in their colour, everyone else is faint.
+            Press play: the dancer we're following is drawn in colour with a tag over their head
+            {check.result.people > 1 ? ', everyone else is faint' : ''}.
             Make sure the coloured skeleton stays on the same person the whole way through.
           </p>
           <DancerCheck src={fileUrl} aspect={check.result.aspect} raw={check.result.raw} tracked={check.tracked}
-            color={PERSON_COLORS[check.person % PERSON_COLORS.length]} suspects={check.report.suspects} />
+            color={PERSON_COLORS[check.person % PERSON_COLORS.length]}
+            label={check.result.people > 1 ? `DANCER ${check.person + 1} ✓` : 'FOLLOWING ✓'}
+            suspects={check.report.suspects} />
           <p className="dancer-coverage">
-            👀 We could see Dancer {check.person + 1} in <b>{Math.round(check.report.coverage * 100)}%</b> of their part of the video
+            👀 We could see {check.result.people > 1 ? `Dancer ${check.person + 1}` : 'them'} in <b>{Math.round(check.report.coverage * 100)}%</b> of their part of the video
             {check.report.coverage < 0.8 ? ' (they were hidden or blocked a lot: scores may be patchy)' : ''}.
           </p>
           <div className="row people-picks">
-            <button type="button" className="btn-teal" onClick={() => build(check.result, check.tracked)}>✓ YES, THAT'S THEM</button>
-            <button type="button" className="btn-orange" onClick={() => chooseAgain(check.result)}>↺ PICK A DIFFERENT DANCER</button>
+            <button type="button" className="btn-teal" onClick={() => build(check.result, check.tracked, check.person)}>✓ YES, THAT'S THEM</button>
+            {check.result.people > 1 && (
+              <button type="button" className="btn-orange" onClick={() => chooseAgain(check.result)}>↺ PICK A DIFFERENT DANCER</button>
+            )}
           </div>
         </Win>
       )}
 
       {dance && (
-        <Win title="STEP_SPLITTER.exe" color="pink" className="upload-win">
+        <Win id="upload-steps" title="STEP_SPLITTER.exe" color="pink" className="upload-win">
           <h2 className="section-title small">{dance.name}</h2>
           <p className="muted">
             We split it into {dance.steps.length} {dance.steps.length === 1 ? 'step' : 'steps'} automatically
             (8 counts each). Happy with that? Save it. Want different steps? Edit them below.
           </p>
-          {crowd && (
+          {dance.dancer && (
             <p className="muted">
-              Wrong person? <button type="button" className="link-btn" onClick={() => chooseAgain(crowd)}>choose a different dancer</button>
+              <span className="dancer-chip" style={{ background: dance.dancer.color }}>DANCER {dance.dancer.number}</span>
+              {' '}is the one you're learning. Wrong person? <button type="button" className="link-btn" onClick={() => chooseAgain(crowd)}>choose a different dancer</button>
             </p>
           )}
           <StepEditor key={dance.frames.length} dance={dance} videoSrc={fileUrl} onChange={setSteps} />

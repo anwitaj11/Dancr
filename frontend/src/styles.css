@@ -336,6 +336,8 @@ main.immersive { padding: 0; }
 .dancer-suspects { font-weight: 700; text-align: center; }
 .dancer-suspects .chip { margin: 0 4px; border: 2px solid var(--ink); background: var(--yellow); padding: 2px 8px; font-weight: 900; cursor: pointer; }
 .dancer-coverage { text-align: center; font-family: var(--mono); font-size: 0.85rem; }
+.dancer-chip { display: inline-block; padding: 2px 8px; border: 2px solid var(--ink); color: #fff; font-family: var(--mono); font-weight: 900; font-size: 0.8rem; }
+.dancer-marker { pointer-events: none; }
 .link-btn { background: none; border: none; padding: 0; color: var(--blue); font: inherit; font-weight: 900; text-decoration: underline; cursor: pointer; }
 .cam-status { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; padding: 16px; text-align: center; font-weight: 700; color: #fff; }
 
@@ -452,6 +454,8 @@ main.immersive { padding: 0; }
 .step-time { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 0.75rem; }
 .step-time input { width: 84px; padding: 6px 8px; border: 2px solid var(--ink); border-radius: 8px; font: inherit; }
 .step-len { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 52px; }
+.dancer-chip { display: inline-block; padding: 2px 8px; border: 2px solid var(--ink); color: #fff; font-family: var(--mono); font-weight: 900; font-size: 0.8rem; }
+.dancer-marker { pointer-events: none; }
 .link-btn { background: none; border: none; cursor: pointer; font-family: var(--mono); font-weight: 700; font-size: 0.78rem; color: var(--blue); padding: 4px; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn:disabled { opacity: 0.5; cursor: default; }

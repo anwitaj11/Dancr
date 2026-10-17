@@ -169,6 +169,10 @@ export default function Practice() {
   }, [id, user])
 
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
+  // Video with several people: mark the one this lesson follows.
+  const dancerMarker = useMemo(() => (dance?.dancer ? {
+    frames: dance.frames, color: dance.dancer.color, label: `COPY DANCER ${dance.dancer.number}`,
+  } : undefined), [dance])
   const chunk = chunks[chunkIdx]
   const adapt = profile?.adaptations
   // Joints that move in this step count most; mirrored to match the mirrored tutorial.
@@ -483,7 +487,7 @@ export default function Practice() {
                 {hasVideo ? (
                   <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
                     speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror}
-                    muted={!musicOn} volume={ducked ? 0.25 : 0.9} className="fill" />
+                    muted={!musicOn} volume={ducked ? 0.25 : 0.9} className="fill" dancer={dancerMarker} />
                 ) : (
                   <SkeletonPlayer dance={dance} getTime={refTime} mirror={mirror} width={360} height={480}
                     color="#ff3ea5" highlight={drillOn ? drill?.joint : undefined} className="fill" />

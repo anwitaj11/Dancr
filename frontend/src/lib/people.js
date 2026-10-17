@@ -144,6 +144,18 @@ export function trackReport(raw, tracked) {
   return { coverage: tracked.length / (span || 1), suspects }
 }
 
+/** The tracked pose nearest to time t (frames sorted by t), or null if none within 0.1 s. */
+export function poseAt(frames, t) {
+  let lo = 0, hi = frames.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (frames[mid].t < t) lo = mid + 1
+    else hi = mid
+  }
+  const near = [frames[lo], frames[lo - 1]].filter(Boolean).sort((a, b) => Math.abs(a.t - t) - Math.abs(b.t - t))[0]
+  return near?.pose && Math.abs(near.t - t) < 0.1 ? near.pose : null
+}
+
 /** Shift times so the dance starts at 0; returns how much was trimmed. */
 export function rebase(frames) {
   const t0 = frames[0]?.t ?? 0

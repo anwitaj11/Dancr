@@ -6,7 +6,7 @@ import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
 import { ALL_CUES, ENCOURAGEMENT, averageWindow, pickCue } from './cues.js'
-import { crowdSize, dedupePoses, pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer, trackReport } from './people.js'
+import { crowdSize, dedupePoses, pickLargest, poseCenter, poseAt, rebase, sortLeftToRight, trackDancer, trackReport } from './people.js'
 
 describe('angles', () => {
   it('measures the angle at the middle point', () => {
@@ -374,5 +374,14 @@ describe('trackReport', () => {
     const tracked = raw.filter((_, i) => i % 2 === 0).map((f) => ({ t: f.t, pose: body(0.3) }))
     expect(trackReport(raw, tracked).coverage).toBeCloseTo(5 / 9)
     expect(trackReport(raw, tracked).suspects).toEqual([])
+  })
+})
+
+describe('poseAt', () => {
+  const frames = [{ t: 0, pose: 'a' }, { t: 0.5, pose: 'b' }, { t: 2, pose: 'c' }]
+  it('finds the nearest frame, or nothing when the dancer was missing then', () => {
+    expect(poseAt(frames, 0.45)).toBe('b')
+    expect(poseAt(frames, 0.04)).toBe('a')
+    expect(poseAt(frames, 1.2)).toBeNull()
   })
 })

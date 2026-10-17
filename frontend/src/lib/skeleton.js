@@ -104,3 +104,61 @@ export function drawBodyOverlay(ctx, pose, jointScores, map, { mode = 'full', wi
   }
   ctx.restore()
 }
+
+/** Where a video sits inside its element with object-fit: contain (in element pixels). */
+export function containRect(boxW, boxH, videoW, videoH) {
+  if (!videoW || !videoH) return { x: 0, y: 0, w: boxW, h: boxH }
+  const scale = Math.min(boxW / videoW, boxH / videoH)
+  const w = videoW * scale, h = videoH * scale
+  return { x: (boxW - w) / 2, y: (boxH - h) / 2, w, h }
+}
+
+/**
+ * Point out one dancer in a video with several people: their skeleton in their
+ * colour plus a numbered tag above their head. rect = the video's on-screen box.
+ */
+export function drawDancerMarker(ctx, pose, rect, { color, label, mirror = false, lineWidth = 5 }) {
+  const map = ([x, y]) => [rect.x + (mirror ? 1 - x : x) * rect.w, rect.y + y * rect.h]
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.globalAlpha = 0.9
+  // Dark outline first so the colour stands out on any background.
+  for (const [stroke, width, glow] of [['#1d1030', lineWidth + 4, 0], [color, lineWidth, 10]]) {
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = width
+    ctx.shadowColor = color
+    ctx.shadowBlur = glow
+    for (const bone of BONES) {
+      if (!pose[bone.from] || !pose[bone.to]) continue
+      const a = map(pose[bone.from]), b = map(pose[bone.to])
+      ctx.beginPath()
+      ctx.moveTo(a[0], a[1])
+      ctx.lineTo(b[0], b[1])
+      ctx.stroke()
+    }
+  }
+  if (label) {
+    const [hx] = map(pose[P.nose])
+    const top = Math.min(...pose.map((p) => map(p)[1]))
+    ctx.globalAlpha = 1
+    ctx.shadowBlur = 0
+    ctx.font = 'bold 13px sans-serif'
+    const w = ctx.measureText(label).width + 16
+    const x = Math.min(Math.max(hx - w / 2, 2), ctx.canvas.width - w - 2), y = Math.max(2, top - 34)
+    ctx.fillStyle = color
+    ctx.strokeStyle = '#1d1030'
+    ctx.lineWidth = 2
+    ctx.fillRect(x, y, w, 22)
+    ctx.strokeRect(x, y, w, 22)
+    ctx.beginPath() // little arrow pointing down at their head
+    ctx.moveTo(hx - 6, y + 22)
+    ctx.lineTo(hx + 6, y + 22)
+    ctx.lineTo(hx, y + 30)
+    ctx.closePath()
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, x + 8, y + 12)
+  }
+  ctx.restore()
+}

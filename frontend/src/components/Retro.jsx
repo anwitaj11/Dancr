@@ -13,9 +13,9 @@ export function Logo() {
 }
 
 /** A retro desktop window with a coloured title bar. */
-export function Win({ title, color = 'blue', dots = false, controls = true, extra, className = '', children }) {
+export function Win({ title, color = 'blue', dots = false, controls = true, extra, className = '', id, children }) {
   return (
-    <div className={`win win-${color} ${className}`}>
+    <div id={id} className={`win win-${color} ${className}`}>
       <div className="win-bar">
         {dots && <span className="win-dots" aria-hidden="true"><i /><i /><i /></span>}
         <span className="win-title">{title}</span>
