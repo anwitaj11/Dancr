@@ -29,6 +29,7 @@ export const api = {
     fetch(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
       .then((r) => { if (!r.ok) throw new Error(`video upload failed: ${r.status}`) }),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
+  deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
 }
 
 export function currentUser() {

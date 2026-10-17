@@ -9,16 +9,17 @@ let fileset = null
 /**
  * One landmarker per use ("webcam", "upload"): VIDEO mode needs increasing
  * timestamps, so the webcam and the video processor can't share one.
+ * Both look for several people so we can pick the right dancer (see people.js).
  */
 const landmarkers = {}
 
-export function getLandmarker(key = 'webcam') {
+export function getLandmarker(key = 'webcam', { numPoses = 1 } = {}) {
   landmarkers[key] ??= (async () => {
     fileset ??= await FilesetResolver.forVisionTasks(WASM_URL)
     const options = {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
       runningMode: 'VIDEO',
-      numPoses: 1,
+      numPoses,
     }
     try {
       return await PoseLandmarker.createFromOptions(fileset, options)

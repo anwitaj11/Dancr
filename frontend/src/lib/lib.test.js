@@ -5,6 +5,7 @@ import { LoopStats, countAt, jointScore, matchWithTiming, ratingFor, sampleAt, s
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
+import { pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer } from './people.js'
 
 describe('angles', () => {
   it('measures the angle at the middle point', () => {
@@ -161,5 +162,64 @@ describe('manual step editing', () => {
     expect(moveCut(cuts, 1, 5)).toEqual([0, 5, 8, 12, 16])
     expect(moveCut(cuts, 1, 100)).toEqual([0, 7.5, 8, 12, 16])
     expect(moveCut(cuts, 0, 3)).toBe(cuts)
+  })
+})
+
+describe('more than one person', () => {
+  // A stick person centred at x, with height h (bigger = closer to the camera).
+  const person = (x, h = 0.6) => Array.from({ length: 13 }, (_, i) => [x + (i % 2 ? 0.02 : -0.02), 0.2 + (i / 12) * h, 1])
+
+  it('numbers people left to right and picks the closest', () => {
+    const far = person(0.7, 0.3), near = person(0.3, 0.7)
+    expect(sortLeftToRight([far, near])[0]).toBe(near)
+    expect(pickLargest([far, near])).toBe(near)
+  })
+
+  it('follows the chosen dancer and never jumps to the other one', () => {
+    // Two dancers drifting toward each other; the right one leaves the frame at frame 3.
+    const raw = [0, 1, 2, 3, 4].map((i) => ({
+      t: i / 30,
+      poses: i === 3 ? [person(0.2 + i * 0.02)] : [person(0.7 - i * 0.02), person(0.2 + i * 0.02)],
+    }))
+    const right = trackDancer(raw, 0, 1)
+    expect(right.map((f) => f.t)).toEqual([0, 1 / 30, 2 / 30, 4 / 30]) // frame 3 dropped, not swapped
+    expect(right.every((f) => poseCenter(f.pose)[0] > 0.5)).toBe(true)
+    const left = trackDancer(raw, 2, 0) // anchored mid-clip: walks backwards too
+    expect(left).toHaveLength(5)
+    expect(left.every((f) => poseCenter(f.pose)[0] < 0.5)).toBe(true)
+  })
+
+  it('re-bases time to the first frame', () => {
+    const { frames, trimmed } = rebase([{ t: 1.5, pose: [] }, { t: 2 }])
+    expect(trimmed).toBe(1.5)
+    expect(frames.map((f) => f.t)).toEqual([0, 0.5])
+  })
+})
+
+describe('moving dancers', () => {
+  const person = (x, h = 0.6) => Array.from({ length: 13 }, (_, i) => [x + (i % 2 ? 0.02 : -0.02), 0.2 + (i / 12) * h, 1])
+
+  it('keeps the right dancer when two cross paths', () => {
+    // A walks left→right, B walks right→left; they pass through each other at frame 5.
+    const raw = Array.from({ length: 11 }, (_, i) => ({
+      t: i / 30,
+      poses: [person(0.3 + i * 0.04), person(0.7 - i * 0.04)],
+    }))
+    const a = trackDancer(raw, 0, 0) // A starts on the left
+    expect(a).toHaveLength(11)
+    expect(poseCenter(a.at(-1).pose)[0]).toBeCloseTo(0.7) // and ends on the right
+    const b = trackDancer(raw, 0, 1)
+    expect(poseCenter(b.at(-1).pose)[0]).toBeCloseTo(0.3)
+  })
+
+  it('finds the dancer again after they are hidden for a few frames', () => {
+    // Dancer moves right 0.06/frame and is hidden for frames 3–5; a bystander stands still.
+    const raw = Array.from({ length: 9 }, (_, i) => ({
+      t: i / 30,
+      poses: [person(0.85, 0.4), ...(i >= 3 && i <= 5 ? [] : [person(0.1 + i * 0.06)])],
+    }))
+    const d = trackDancer(raw, 0, 0)
+    expect(d.map((f) => Math.round(f.t * 30))).toEqual([0, 1, 2, 6, 7, 8])
+    expect(d.every((f) => poseCenter(f.pose)[0] < 0.7)).toBe(true) // never grabbed the bystander
   })
 })

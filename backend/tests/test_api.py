@@ -52,6 +52,16 @@ def test_full_flow():
         assert (replaced["name"], replaced["bpm"], replaced["data"]["fps"]) == ("Real Dab", 96, 24)
         assert client.put("/dances/999", json=new).status_code == 404
 
+        # a second dance, deleted along with its video and attempts
+        doomed = client.post("/dances", json=DANCE).json()["id"]
+        client.put(f"/dances/{doomed}/video", content=b"vid", headers={"content-type": "video/mp4"})
+        attempt(client, dance_id=doomed)
+        assert client.delete(f"/dances/{doomed}").status_code == 200
+        assert client.get(f"/dances/{doomed}").status_code == 404
+        assert client.get(f"/dances/{doomed}/video").status_code == 404
+        assert client.get("/profile/sam").json()["stats"]["attempts"] == 0
+        assert client.delete(f"/dances/{doomed}").status_code == 404
+
         # five weak, late tries on one step → slow + timing + legs detail drill
         for _ in range(5):
             profile = attempt(client, dance_id=dance_id, timing_offset=-0.3,

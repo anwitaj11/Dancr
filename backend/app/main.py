@@ -118,6 +118,19 @@ def replace_dance(dance_id: int, dance: DanceUpdate):
     return {"id": dance_id}
 
 
+@app.delete("/dances/{dance_id}")
+def delete_dance(dance_id: int):
+    """Remove a dance from the library, with its video and the attempts made on it."""
+    with session() as conn:
+        conn.execute("DELETE FROM attempts WHERE dance_id = ?", (dance_id,))
+        cur = conn.execute("DELETE FROM dances WHERE id = ?", (dance_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "dance not found")
+    if video := _video_path(dance_id):
+        video.unlink()
+    return {"deleted": dance_id}
+
+
 @app.get("/dances/{dance_id}")
 def get_dance(dance_id: int):
     with session() as conn:

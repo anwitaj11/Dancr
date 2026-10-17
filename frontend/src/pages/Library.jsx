@@ -60,6 +60,21 @@ export default function Library() {
   const [error, setError] = useState(null)
   const [profile, setProfile] = useState(null)
 
+  const [removing, setRemoving] = useState(false)
+
+  async function remove(ids, message) {
+    if (!window.confirm(message)) return
+    setRemoving(true)
+    try {
+      for (const id of ids) await api.deleteDance(id)
+      setDances(await api.listDances())
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   useEffect(() => {
     api.listDances().then(setDances).catch((e) => setError(e.message))
     api.getProfile(user).then(setProfile).catch(() => {})
@@ -119,27 +134,45 @@ export default function Library() {
       <section id="dances" className="dances grid-bg">
         <p className="script center">pick ur obsession ↓</p>
         <h2 className="section-title">the dance library</h2>
-        {list.some((d) => d.builtin && !d.hasVideo) && (
-          <Link to="/upload" className="note-card add-video">
-            🎥 Some dances are still demo stick figures. <b>Add the real video →</b>
-          </Link>
+        {list.some((d) => !d.hasVideo) && (
+          <div className="note-card add-video">
+            🎥 Some dances are still demo stick figures.{' '}
+            <Link to="/upload"><b>Add the real video →</b></Link>{' '}
+            <button type="button" className="link-btn" disabled={removing}
+              onClick={() => {
+                const demos = list.filter((d) => !d.hasVideo)
+                remove(demos.map((d) => d.id), `Remove ${demos.length} demo ${demos.length === 1 ? 'dance' : 'dances'} (and their practice history)?`)
+              }}>
+              {removing ? 'removing…' : '🗑 remove all demo figures'}
+            </button>
+          </div>
         )}
         {dances && dances.length === 0 && (
-          <p className="note-card">No dances yet. Run <code>npm run seed</code> in <code>frontend/</code>, or upload one.</p>
+          <div className="empty-library">
+            <p className="script">it's giving… empty ✨</p>
+            <p>Your library is ready for real dances. Upload your first one!</p>
+            <Link to="/upload" className="btn-pink">UPLOAD A DANCE ✦</Link>
+          </div>
         )}
         {!dances && !error && <div className="spinner center-block" />}
         <div className="polaroid-grid">
           {list.map((d, i) => (
-            <Link key={d.id} to={`/practice/${d.id}`} className="dance-card">
-              <Polaroid caption={d.name} tilt={TILTS[i % TILTS.length]} badge={i + 1}>
-                <DancePreview summary={d} i={i} />
-              </Polaroid>
+            <div key={d.id} className="dance-card">
+              <Link to={`/practice/${d.id}`}>
+                <Polaroid caption={d.name} tilt={TILTS[i % TILTS.length]} badge={i + 1}>
+                  <DancePreview summary={d} i={i} />
+                </Polaroid>
+              </Link>
               <div className="dance-meta">
                 <span className="tag tag-pink">{d.steps} {d.steps === 1 ? 'STEP' : 'STEPS'} · {LEVELS[d.difficulty] ?? 'Advanced'}</span>
                 <span className="tag tag-blue">♫ {Math.round(d.bpm)} BPM</span>
                 {!d.hasVideo && <span className="tag tag-ghost">demo figure</span>}
+                <button type="button" className="link-btn remove-btn" disabled={removing} aria-label={`Remove ${d.name}`}
+                  onClick={() => remove([d.id], `Remove "${d.name}" from the library (and its practice history)?`)}>
+                  🗑 remove
+                </button>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       </section>

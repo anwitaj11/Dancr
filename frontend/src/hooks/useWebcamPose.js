@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { getLandmarker } from '../lib/pose.js'
 import { toPose } from '../lib/angles.js'
+import { pickLargest } from '../lib/people.js'
 
 /**
- * Webcam + PoseLandmarker loop. Calls onFrame({ pose, video, now }) every
- * animation frame (pose is null when no body is found).
+ * Webcam + PoseLandmarker loop. Calls onFrame({ pose, people, video, now }) every
+ * animation frame. pose is the person closest to the camera (null when no one
+ * is found); people is how many were seen, so the UI can say who it's scoring.
  */
 export function useWebcamPose(onFrame) {
   // Callback ref: the camera starts once the <video> is actually mounted,
@@ -30,7 +32,7 @@ export function useWebcamPose(onFrame) {
         if (cancelled) return stream.getTracks().forEach((t) => t.stop())
         video.srcObject = stream
         await video.play()
-        const landmarker = await getLandmarker('webcam')
+        const landmarker = await getLandmarker('webcam', { numPoses: 3 })
         if (cancelled) return
         setStatus('ready')
         const loop = () => {
@@ -38,8 +40,8 @@ export function useWebcamPose(onFrame) {
           if (video.readyState >= 2 && now > lastTs) {
             lastTs = now
             const result = landmarker.detectForVideo(video, now)
-            const landmarks = result.landmarks?.[0]
-            onFrameRef.current?.({ pose: landmarks ? toPose(landmarks) : null, video, now })
+            const poses = (result.landmarks ?? []).map(toPose)
+            onFrameRef.current?.({ pose: poses.length ? pickLargest(poses) : null, people: poses.length, video, now })
           }
           raf = requestAnimationFrame(loop)
         }

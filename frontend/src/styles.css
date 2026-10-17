@@ -225,7 +225,7 @@ main.immersive { padding: 0; }
 .add-video { max-width: 640px; margin: 0 auto 28px; text-align: center; }
 .polaroid-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 36px 28px; max-width: 1150px; margin: 0 auto; }
 .dance-card { display: flex; flex-direction: column; gap: 12px; }
-.dance-card:hover .polaroid { transform: rotate(0deg) scale(1.03); }
+.dance-card a:hover .polaroid { transform: rotate(0deg) scale(1.03); }
 .dance-card .polaroid-photo { aspect-ratio: 3 / 4; }
 .dance-meta { display: flex; flex-wrap: wrap; gap: 6px; }
 
@@ -314,6 +314,12 @@ main.immersive { padding: 0; }
 .countin { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-size: 9rem; color: var(--yellow); -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; background: #1d103055; animation: pop 0.35s ease-out; }
 @keyframes pop { from { transform: scale(1.6); opacity: 0; } }
 .frame-warn { position: absolute; left: 10px; right: 10px; bottom: 50px; padding: 8px 12px; background: var(--warn); color: #fff; border: 2px solid var(--ink); font-weight: 900; font-size: 0.8rem; text-align: center; }
+.crowd-note { position: absolute; left: 10px; right: 10px; top: 120px; z-index: 2; padding: 6px 10px; background: var(--yellow); border: 2px solid var(--ink); font-family: var(--mono); font-weight: 700; font-size: 0.72rem; text-align: center; }
+.people-snapshot { display: block; width: 100%; max-width: 640px; margin: 14px auto; border: var(--border); box-shadow: var(--shadow-sm); }
+.people-picks { justify-content: center; }
+.people-picks .person-1 { background: var(--blue); }
+.people-picks .person-2 { background: var(--orange); }
+.people-picks .person-3 { background: #00b3a4; }
 .cam-status { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; padding: 16px; text-align: center; font-weight: 700; color: #fff; }
 
 .player-controls { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: #ffd23f; border-top: var(--border); font-family: var(--mono); font-weight: 700; }
@@ -434,6 +440,10 @@ main.immersive { padding: 0; }
 .step-len { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 52px; }
 .link-btn { background: none; border: none; cursor: pointer; font-family: var(--mono); font-weight: 700; font-size: 0.78rem; color: var(--blue); padding: 4px; }
 .link-btn:hover { text-decoration: underline; }
+.link-btn:disabled { opacity: 0.5; cursor: default; }
+.remove-btn { margin-left: auto; color: var(--warn); }
+.empty-library { max-width: 520px; margin: 0 auto; text-align: center; background: #fff; border: var(--border); box-shadow: var(--shadow); padding: 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.empty-library p { margin: 0; font-weight: 500; }
 
 /* ---------- calibration ---------- */
 .calibrate { position: relative; height: 100dvh; background: #000; }

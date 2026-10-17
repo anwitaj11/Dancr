@@ -99,6 +99,7 @@ export default function Practice() {
   const [countIn, setCountIn] = useState(null)
   const [live, setLive] = useState(null)
   const [outOfFrame, setOutOfFrame] = useState(false)
+  const [crowd, setCrowd] = useState(0) // people in the webcam view
   const [result, setResult] = useState(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [tip, setTip] = useState(null)
@@ -241,9 +242,10 @@ export default function Practice() {
     }
   }
 
-  const { videoRef, status, error } = useWebcamPose(({ pose, video }) => {
+  const { videoRef, status, error } = useWebcamPose(({ pose, people, video }) => {
     const canvas = canvasRef.current
     if (!canvas || !dance || !chunk) return
+    setCrowd(people)
     const vw = video.videoWidth, vh = video.videoHeight
     // Crop the webcam to the panel's shape (portrait side-by-side on desktop,
     // stacked on phones), following the dancer's hips so they stay centred.
@@ -416,6 +418,7 @@ export default function Practice() {
                   </div>
                 )}
                 {countIn && <div className="countin" key={countIn}>{countIn}</div>}
+                {crowd > 1 && <div className="crowd-note">👥 {crowd} people in view: scoring whoever is closest</div>}
                 {outOfFrame && phase !== 'idle' && <div className="frame-warn">Step back so your whole body is in the frame</div>}
                 {status === 'starting' && <div className="cam-status"><div className="spinner" /> Starting camera…</div>}
                 {error && <div className="cam-status warn">{error}</div>}
