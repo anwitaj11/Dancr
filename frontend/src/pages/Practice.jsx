@@ -72,6 +72,28 @@ function mirrorWeights(weights) {
 const SKELETON_MODES = ['full', 'mistakes', 'off']
 const SKELETON_LABELS = { full: 'FULL BODY', mistakes: 'MISTAKES', off: 'OFF' }
 
+// Who-to-copy marker on the tutorial video (only for videos with several people).
+const MARKER_KEY = 'dancr.dancerMarker'
+const MARKER_MODES = ['tag', 'body', 'off']
+const MARKER_LABELS = { tag: 'TAG', body: 'TAG + BODY', off: 'OFF' }
+
+function loadMarkerPref() {
+  try {
+    const saved = localStorage.getItem(MARKER_KEY)
+    return MARKER_MODES.includes(saved) ? saved : 'tag'
+  } catch {
+    return 'tag'
+  }
+}
+
+function saveMarkerPref(mode) {
+  try {
+    localStorage.setItem(MARKER_KEY, mode)
+  } catch {
+    // private mode: the choice lasts for this page only
+  }
+}
+
 function loadSkeletonPref() {
   try {
     const saved = localStorage.getItem(SKELETON_KEY)
@@ -126,6 +148,7 @@ export default function Practice() {
   const [ducked, setDucked] = useState(false) // music quieter while a spoken line plays
   const [drillOn, setDrillOn] = useState(false)
   const [skeletonMode, setSkeletonMode] = useState(loadSkeletonPref)
+  const [markerMode, setMarkerMode] = useState(loadMarkerPref)
   const [previewFirst, setPreviewFirst] = useState(loadPreviewPref)
   const [hasVideo, setHasVideo] = useState(false)
   const [difficulty, setDifficulty] = useState(1)
@@ -170,9 +193,9 @@ export default function Practice() {
 
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
   // Video with several people: mark the one this lesson follows.
-  const dancerMarker = useMemo(() => (dance?.dancer ? {
-    frames: dance.frames, color: dance.dancer.color, label: `COPY DANCER ${dance.dancer.number}`,
-  } : undefined), [dance])
+  const dancerMarker = useMemo(() => (dance?.dancer && markerMode !== 'off' ? {
+    frames: dance.frames, color: dance.dancer.color, label: `COPY DANCER ${dance.dancer.number}`, body: markerMode === 'body',
+  } : undefined), [dance, markerMode])
   const chunk = chunks[chunkIdx]
   const adapt = profile?.adaptations
   // Joints that move in this step count most; mirrored to match the mirrored tutorial.
@@ -498,6 +521,16 @@ export default function Practice() {
                     style={dance.dancer ? { background: dance.dancer.color } : undefined}>
                     {dance.dancer ? `👤 DANCER ${dance.dancer.number} · change` : '👥 choose dancer'}
                   </Link>
+                )}
+                {dance.dancer && (
+                  <button type="button" className="marker-toggle" title="Tap to switch: tag only, tag and body, or off"
+                    onClick={() => setMarkerMode((m) => {
+                      const next = MARKER_MODES[(MARKER_MODES.indexOf(m) + 1) % MARKER_MODES.length]
+                      saveMarkerPref(next)
+                      return next
+                    })}>
+                    🏷 Marker: {MARKER_LABELS[markerMode]}
+                  </button>
                 )}
                 <span className="half-note">watch the arms! ↖</span>
               </div>

@@ -3,7 +3,7 @@ import { poseAt } from '../lib/people.js'
 import { containRect, drawDancerMarker } from '../lib/skeleton.js'
 
 /**
- * A looping video (object-fit: cover) with the lesson's dancer tagged on it,
+ * A looping video (object-fit: cover) with a tag over the lesson's dancer,
  * for library cards. dance: the stored dance JSON (frames, videoOffset, dancer).
  */
 export default function MarkedVideo({ src, dance, small = false }) {
@@ -23,7 +23,7 @@ export default function MarkedVideo({ src, dance, small = false }) {
       const pose = poseAt(dance.frames, v.currentTime - (dance.videoOffset ?? 0))
       if (pose) {
         drawDancerMarker(ctx, pose, containRect(w, h, v.videoWidth, v.videoHeight, true), {
-          color: dance.dancer.color, label: small ? String(dance.dancer.number) : `COPY DANCER ${dance.dancer.number}`, lineWidth: small ? 2 : 4,
+          color: dance.dancer.color, label: small ? String(dance.dancer.number) : `COPY DANCER ${dance.dancer.number}`, body: false,
         })
       }
     }

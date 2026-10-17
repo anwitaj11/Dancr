@@ -46,6 +46,14 @@ def test_full_flow():
         assert client.get(f"/dances/{dance_id}/video").content == b"fakemp4"
         assert client.get("/dances").json()[0]["hasVideo"] is True
 
+        # the saved multi-person scan sits next to the video without being mistaken for it
+        assert client.get(f"/dances/{dance_id}/people").status_code == 404
+        scan = {"people": 2, "anchor": 0, "raw": [{"t": 0, "poses": []}]}
+        assert client.put(f"/dances/{dance_id}/people", content=b"not json").status_code == 400
+        assert client.put(f"/dances/{dance_id}/people", json=scan).status_code == 200
+        assert client.get(f"/dances/{dance_id}/people").json() == scan
+        assert client.get(f"/dances/{dance_id}/video").content == b"fakemp4"
+
         new = {"name": "Real Dab", "bpm": 96, "data": {**DANCE["data"], "fps": 24}}
         assert client.put(f"/dances/{dance_id}", json=new).status_code == 200
         replaced = client.get(f"/dances/{dance_id}").json()
@@ -55,10 +63,12 @@ def test_full_flow():
         # a second dance, deleted along with its video and attempts
         doomed = client.post("/dances", json=DANCE).json()["id"]
         client.put(f"/dances/{doomed}/video", content=b"vid", headers={"content-type": "video/mp4"})
+        client.put(f"/dances/{doomed}/people", json={"people": 1})
         attempt(client, dance_id=doomed)
         assert client.delete(f"/dances/{doomed}").status_code == 200
         assert client.get(f"/dances/{doomed}").status_code == 404
         assert client.get(f"/dances/{doomed}/video").status_code == 404
+        assert client.get(f"/dances/{doomed}/people").status_code == 404
         assert client.get("/profile/sam").json()["stats"]["attempts"] == 0
         assert client.delete(f"/dances/{doomed}").status_code == 404
 

@@ -385,3 +385,26 @@ describe('poseAt', () => {
     expect(poseAt(frames, 1.2)).toBeNull()
   })
 })
+
+describe('trackDancer with clothing colours', () => {
+  const body = (x) => Array.from({ length: 15 }, (_, i) => [x, 0.2 + i * 0.04, 0.9])
+  const RED = [200, 30, 30, 200, 30, 30, 40, 40, 40], BLUE = [30, 30, 200, 30, 30, 200, 40, 40, 40]
+  it('stays on the picked dancer when two people swap places', () => {
+    // red walks 0.2 → 0.8 while blue walks 0.8 → 0.2; they pass each other mid-way
+    const raw = Array.from({ length: 61 }, (_, i) => {
+      const k = i / 60, red = 0.2 + 0.6 * k, blue = 0.8 - 0.6 * k
+      return { t: i / 30, poses: [body(blue), body(red)], looks: [BLUE, RED] }
+    })
+    const tracked = trackDancer(raw, 0, 0) // leftmost at the start = red
+    expect(tracked.length).toBe(61)
+    expect(poseCenter(tracked.at(-1).pose)[0]).toBeCloseTo(0.8)
+  })
+  it('drops frames instead of jumping to someone in different clothes', () => {
+    const raw = Array.from({ length: 30 }, (_, i) => (i >= 10 && i < 20
+      ? { t: i / 30, poses: [body(0.52)], looks: [BLUE] } // red is hidden; blue stands right there
+      : { t: i / 30, poses: [body(0.5)], looks: [RED] }))
+    const tracked = trackDancer(raw, 0, 0)
+    expect(tracked).toHaveLength(20)
+    expect(trackReport(raw, tracked).coverage).toBeCloseTo(20 / 30)
+  })
+})

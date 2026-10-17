@@ -31,7 +31,13 @@ MAX_VIDEO_BYTES = 200 * 1024 * 1024
 
 
 def _video_path(dance_id: int) -> Path | None:
-    return next(MEDIA_DIR.glob(f"{dance_id}.*"), None) if MEDIA_DIR.exists() else None
+    paths = (MEDIA_DIR / f"{dance_id}{ext}" for ext in VIDEO_TYPES.values())
+    return next((p for p in paths if p.exists()), None)
+
+
+def _people_path(dance_id: int) -> Path:
+    """Everyone the pose model saw in the video, saved so the dancer can be changed without a rescan."""
+    return MEDIA_DIR / f"{dance_id}.people.json"
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -129,6 +135,7 @@ def delete_dance(dance_id: int):
             raise HTTPException(404, "dance not found")
     if video := _video_path(dance_id):
         video.unlink()
+    _people_path(dance_id).unlink(missing_ok=True)
     return {"deleted": dance_id}
 
 
@@ -160,6 +167,32 @@ async def upload_video(dance_id: int, request: Request):
         old.unlink()
     (MEDIA_DIR / f"{dance_id}{ext}").write_bytes(body)
     return {"ok": True}
+
+
+@app.put("/dances/{dance_id}/people")
+async def save_people(dance_id: int, request: Request):
+    """The video's multi-person scan (JSON from the browser), kept next to the video."""
+    with session() as conn:
+        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
+            raise HTTPException(404, "dance not found")
+    body = await request.body()
+    if len(body) > MAX_VIDEO_BYTES:
+        raise HTTPException(413, "scan too large")
+    try:
+        json.loads(body)
+    except ValueError:
+        raise HTTPException(400, "scan must be JSON")
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    _people_path(dance_id).write_bytes(body)
+    return {"ok": True}
+
+
+@app.get("/dances/{dance_id}/people")
+def get_people(dance_id: int):
+    path = _people_path(dance_id)
+    if not path.exists():
+        raise HTTPException(404, "no saved scan for this dance")
+    return FileResponse(path, media_type="application/json")
 
 
 @app.get("/dances/{dance_id}/video")

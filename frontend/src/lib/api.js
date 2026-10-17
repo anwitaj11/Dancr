@@ -46,6 +46,9 @@ export const api = {
         const detail = await r.json().then((b) => b?.detail).catch(() => null)
         throw new Error(`video upload failed: ${typeof detail === 'string' ? detail : r.status}`)
       }),
+  // Saved multi-person scan: null when the dance doesn't have one (older uploads).
+  savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
+  getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
   voiceSession: () => json('/voice-agent/session'),

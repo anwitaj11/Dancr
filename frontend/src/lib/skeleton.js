@@ -117,13 +117,13 @@ export function containRect(boxW, boxH, videoW, videoH, cover = false) {
  * Point out one dancer in a video with several people: their skeleton in their
  * colour plus a numbered tag above their head. rect = the video's on-screen box.
  */
-export function drawDancerMarker(ctx, pose, rect, { color, label, mirror = false, lineWidth = 5 }) {
+export function drawDancerMarker(ctx, pose, rect, { color, label, mirror = false, lineWidth = 5, body = true }) {
   const map = ([x, y]) => [rect.x + (mirror ? 1 - x : x) * rect.w, rect.y + y * rect.h]
   ctx.save()
   ctx.lineCap = 'round'
   ctx.globalAlpha = 0.9
   // Dark outline first so the colour stands out on any background.
-  for (const [stroke, width, glow] of [['#1d1030', lineWidth + 4, 0], [color, lineWidth, 10]]) {
+  for (const [stroke, width, glow] of body ? [['#1d1030', lineWidth + 4, 0], [color, lineWidth, 10]] : []) {
     ctx.strokeStyle = stroke
     ctx.lineWidth = width
     ctx.shadowColor = color

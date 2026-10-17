@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { buildDance } from '../lib/dance.js'
-import { processVideoFile } from '../lib/processVideo.js'
+import { packScan, processVideoFile } from '../lib/processVideo.js'
 import { rebase } from '../lib/people.js'
 import DancerChooser, { dancerInfo } from '../components/DancerChooser.jsx'
 import StepEditor from '../components/StepEditor.jsx'
@@ -23,6 +23,7 @@ export default function Upload() {
   const [dance, setDance] = useState(null)
   const [processed, setProcessed] = useState(null) // processed video, while choosing who to follow
   const [crowd, setCrowd] = useState(null) // the multi-person video the current lesson came from
+  const [scan, setScan] = useState(null) // the scan the current lesson came from, saved for changing dancers later
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   // Local preview of the chosen file, for the step editor.
@@ -74,6 +75,7 @@ export default function Upload() {
     const { frames, trimmed } = rebase(tracked)
     setProcessed(null)
     setCrowd(result.people > 1 ? result : null)
+    setScan(result)
     setDance(buildDance({
       dancer: dancerInfo(result, person),
       name: name || file.name.replace(/\.[^.]+$/, ''),
@@ -81,6 +83,7 @@ export default function Upload() {
       // Count 1 was marked in original video time; frames were re-based to the dancer's first frame.
       countStart: Math.max(0, Number(countStart) - trimmed),
       aspect: result.aspect,
+      fps: result.fps,
       videoOffset: trimmed,
       frames,
     }))
@@ -95,6 +98,8 @@ export default function Upload() {
         : (await api.createDance(dance, { builtin })).id
       // Keep the original clip so the feed and practice screen can show it.
       await api.uploadVideo(id, file)
+      // Optional extra: lets "change dancer" skip rescanning the video later.
+      if (scan) await api.savePeople(id, packScan(scan)).catch(() => {})
       navigate(`/practice/${id}`)
     } catch (e) {
       setError(`Couldn't save: ${e.message}`)

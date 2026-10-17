@@ -71,38 +71,60 @@ export function sortLeftToRight(poses) {
 const MAX_JUMP = 0.15 // max hip movement between consecutive frames (fraction of the frame)
 const MAX_GAP_JUMP = 0.4 // cap when the dancer has been hidden for a while
 const SIZE_WEIGHT = 0.5 // how much a change in body size counts against a match
+const LOOK_WEIGHT = 1 // how much different clothing colours count against a match
+const LOOK_MAX = 0.3 // colours this different = someone else, even if they're standing in the right spot
+
+/**
+ * How different two people look (clothing colours from processVideo's lookOf), 0–1.
+ * null when either is unknown (scans saved before colours were recorded).
+ */
+export function lookDiff(a, b) {
+  if (!a || !b) return null
+  let sum = 0
+  for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2
+  return Math.sqrt(sum / a.length) / 255
+}
 
 /**
  * Follow one dancer through all frames, even while people move around.
- * raw: [{ t, poses: [pose, ...] }]; anchor: index of a frame where the dancer is visible;
- * person: which one in that frame, counting left to right.
+ * raw: [{ t, poses: [pose, ...], looks?: [colours, ...] }]; anchor: index of a
+ * frame where the dancer is visible; person: which one in that frame, counting left to right.
  *
  * Walks forwards and backwards from the anchor. Each frame it predicts where the
  * dancer should be from their recent speed and direction, then takes the pose
- * closest to that prediction and most similar in size. That keeps the right person
- * when two dancers cross paths. If the dancer is hidden for a few frames (someone
- * walks in front), the search widens until they reappear. Frames where they can't
- * be found are dropped rather than filled with someone else.
+ * that's closest to that prediction, most similar in size and, above all, wearing
+ * the same colours as the dancer that was picked. That keeps the right person when
+ * dancers cross paths or swap places. Someone in clearly different clothes is never
+ * taken, even in the right spot. If the dancer is hidden for a few frames, the search
+ * widens until they reappear. Frames where they can't be found are dropped rather
+ * than filled with someone else.
  */
 export function trackDancer(raw, anchor, person) {
-  const start = sortLeftToRight(raw[anchor].poses)[person]
+  const order = sortLeftToRight(raw[anchor].poses)
+  const start = order[person]
   if (!start) return []
+  const startLook = raw[anchor].looks?.[raw[anchor].poses.indexOf(start)] ?? null
   const follow = (indices) => {
     const out = []
     let last = poseCenter(start), lastSize = poseSize(start)
+    let look = startLook // drifts slowly with the light, but always checked against the pick too
     let vel = [0, 0], gap = 0
     for (const i of indices) {
       gap++
       const predicted = [last[0] + vel[0] * gap, last[1] + vel[1] * gap]
       const limit = Math.min(MAX_GAP_JUMP, MAX_JUMP * gap)
-      let best = null, bestCost = Infinity
-      for (const pose of raw[i].poses) {
+      let best = null, bestLook = null, bestCost = Infinity
+      raw[i].poses.forEach((pose, k) => {
         const [x, y] = poseCenter(pose)
         const dist = Math.hypot(x - predicted[0], y - predicted[1])
-        if (dist > limit) continue
-        const cost = dist + SIZE_WEIGHT * Math.abs(poseSize(pose) - lastSize)
-        if (cost < bestCost) { best = pose; bestCost = cost }
-      }
+        if (dist > limit) return
+        const candidate = raw[i].looks?.[k] ?? null
+        const diffs = [lookDiff(candidate, look), lookDiff(candidate, startLook)].filter((d) => d !== null)
+        const colour = diffs.length ? Math.min(...diffs) : 0
+        if (colour > LOOK_MAX) return // different outfit: not our dancer
+        const cost = dist + SIZE_WEIGHT * Math.abs(poseSize(pose) - lastSize) + LOOK_WEIGHT * colour
+        if (cost < bestCost) { best = pose; bestLook = candidate; bestCost = cost }
+      })
       if (!best) continue // hidden or out of frame this time
       const center = poseCenter(best)
       const step = [(center[0] - last[0]) / gap, (center[1] - last[1]) / gap]
@@ -110,6 +132,8 @@ export function trackDancer(raw, anchor, person) {
       out.push({ t: raw[i].t, pose: best })
       last = center
       lastSize = poseSize(best)
+      if (bestLook && look) look = look.map((v, c) => v * 0.9 + bestLook[c] * 0.1)
+      else look ??= bestLook
       gap = 0
     }
     return out

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { buildDance } from '../lib/dance.js'
-import { processVideoFile } from '../lib/processVideo.js'
+import { packScan, processVideoFile } from '../lib/processVideo.js'
 import { rebase } from '../lib/people.js'
 import DancerChooser, { dancerInfo } from '../components/DancerChooser.jsx'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
@@ -27,18 +27,35 @@ export default function ChooseDancer() {
     api.getDance(id).then((e) => {
       if (!e.hasVideo) throw new Error('This dance has no video yet, so there are no dancers to choose from.')
       setEntry(e)
-      return fetch(api.videoUrl(id)).then((r) => r.blob())
-    }).then(setBlob).catch((e) => setError(e.message))
+      // A scan saved at upload means no waiting: show the dancers straight away.
+      // Older dances get scanned once, automatically, and the scan is saved for next time.
+      return Promise.all([api.getPeople(id).catch(() => null), fetch(api.videoUrl(id)).then((r) => r.blob())])
+    }).then(([saved, video]) => {
+      setBlob(video)
+      if (saved) setResult(saved)
+      else setAutoScan(true)
+    }).catch((e) => setError(e.message))
   }, [id])
 
+  const [autoScan, setAutoScan] = useState(false)
+  useEffect(() => {
+    if (autoScan && blob) findDancers()
+  }, [autoScan, blob]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const scanning = useRef(false)
   async function findDancers() {
+    if (scanning.current) return // one scan at a time: they share the pose model
+    scanning.current = true
     setError(null)
     setProgress(0)
     try {
-      setResult(await processVideoFile(blob, { onProgress: setProgress }))
+      const scanned = await processVideoFile(blob, { onProgress: setProgress })
+      setResult(scanned)
+      api.savePeople(id, packScan(scanned)).catch(() => {}) // next time is instant
     } catch (e) {
       setError(e.message)
     } finally {
+      scanning.current = false
       setProgress(null)
     }
   }
@@ -56,7 +73,7 @@ export default function ChooseDancer() {
       .filter((s) => s.end > s.start)
       .map((s, i) => ({ ...s, index: i }))
     const dance = buildDance({
-      name: old.name, bpm: old.bpm, fps: old.fps, aspect: result.aspect,
+      name: old.name, bpm: old.bpm, fps: result.fps, aspect: result.aspect,
       countStart: at(old.countStart ?? 0), videoOffset: trimmed, frames,
       steps: steps.length ? steps : undefined, dancer: dancerInfo(result, person),
     })
@@ -82,12 +99,12 @@ export default function ChooseDancer() {
           {current
             ? <>Right now you're learning <span className="dancer-chip" style={{ background: current.color }}>DANCER {current.number}</span> of {current.people}. </>
             : 'Right now this dance follows whoever we spotted first. '}
-          We'll look at the video again so you can see everyone and pick who to copy.
-          Your step split and practice history stay.
+          Pick who to copy below. Your step split and practice history stay.
+          {!result && ' This video was uploaded before scans were saved, so Dancr scans it once now. After that it opens instantly.'}
         </p>
         <div className="row">
           <button className="btn-pink" disabled={!blob || progress !== null || saving} onClick={findDancers}>
-            {progress !== null ? `LOOKING… ${Math.round(progress * 100)}%` : !blob && !error ? 'loading the video…' : result ? 'LOOK AGAIN' : '👥 FIND THE DANCERS'}
+            {progress !== null ? `LOOKING… ${Math.round(progress * 100)}%` : !blob && !error ? 'loading the video…' : result ? '↻ SCAN THE VIDEO AGAIN' : '👥 FIND THE DANCERS'}
           </button>
           <Link to={`/practice/${id}`} className="btn-bracket">[ CANCEL ]</Link>
         </div>

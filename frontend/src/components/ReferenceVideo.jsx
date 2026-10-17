@@ -10,7 +10,8 @@ const DRIFT = 0.15 // seconds before we hard-seek back into sync
  * re-based to the first detected pose when a dance is processed).
  * With muted={false} the clip's own music plays along; the browser keeps the
  * pitch natural at slower speeds.
- * dancer: { frames, color, label } marks who to copy when the clip has several people.
+ * dancer: { frames, color, label, body } marks who to copy when the clip has several people
+ * (a tag over their head, plus their skeleton when body is true).
  */
 export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, muted = true, volume = 1, className, dancer }) {
   const ref = useRef(null)
@@ -52,11 +53,11 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
   )
 }
 
-function drawMarker(canvas, video, { frames, color, label }, t, mirror) {
+function drawMarker(canvas, video, { frames, color, label, body }, t, mirror) {
   const w = canvas.clientWidth, h = canvas.clientHeight
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
   const ctx = canvas.getContext('2d')
   ctx.clearRect(0, 0, w, h)
   const pose = poseAt(frames, t)
-  if (pose) drawDancerMarker(ctx, pose, containRect(w, h, video.videoWidth, video.videoHeight), { color, label, mirror, lineWidth: 4 })
+  if (pose) drawDancerMarker(ctx, pose, containRect(w, h, video.videoWidth, video.videoHeight), { color, label, mirror, body, lineWidth: 4 })
 }
