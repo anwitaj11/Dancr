@@ -328,6 +328,15 @@ main.immersive { padding: 0; }
 .people-picks .person-5 { background: #e0b400; }
 .people-picks .person-6 { background: #00a3e0; }
 .people-picks .person-7 { background: #d6336c; }
+.dancer-check { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 14px 0; }
+.dancer-check-view { position: relative; background: #120a22; border: var(--border); box-shadow: var(--shadow-sm); }
+.dancer-check-view video, .dancer-check-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+.dancer-check-view canvas { pointer-events: none; }
+.dancer-lost { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); padding: 4px 10px; background: var(--warn); color: #fff; border: 2px solid var(--ink); font-family: var(--mono); font-weight: 700; font-size: 0.75rem; }
+.dancer-suspects { font-weight: 700; text-align: center; }
+.dancer-suspects .chip { margin: 0 4px; border: 2px solid var(--ink); background: var(--yellow); padding: 2px 8px; font-weight: 900; cursor: pointer; }
+.dancer-coverage { text-align: center; font-family: var(--mono); font-size: 0.85rem; }
+.link-btn { background: none; border: none; padding: 0; color: var(--blue); font: inherit; font-weight: 900; text-decoration: underline; cursor: pointer; }
 .cam-status { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; padding: 16px; text-align: center; font-weight: 700; color: #fff; }
 
 .player-controls { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: #ffd23f; border-top: var(--border); font-family: var(--mono); font-weight: 700; }

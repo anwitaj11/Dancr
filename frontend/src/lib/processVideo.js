@@ -1,15 +1,15 @@
 import { closeLandmarker, getLandmarker } from './pose.js'
 import { toPose } from './angles.js'
-import { dedupePoses, poseCenter, sortLeftToRight } from './people.js'
+import { crowdSize, dedupePoses, poseCenter, sortLeftToRight } from './people.js'
 
 const MAX_PEOPLE = 8
-const PERSON_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#00b3a4', '#7b3dff', '#e0b400', '#00a3e0', '#d6336c']
+export const PERSON_COLORS = ['#ff3ea5', '#1f4bff', '#ff8a3d', '#00b3a4', '#7b3dff', '#e0b400', '#00a3e0', '#d6336c']
 
 /**
  * Run PoseLandmarker over every frame of a video file, keeping everyone it sees.
  * Returns {
  *   raw: [{ t, poses }]   every sampled frame (poses may be empty),
- *   aspect, people        most people seen in one frame,
+ *   aspect, people        most people seen together (in enough frames to not be a glitch),
  *   anchor, snapshot      that frame's index and a JPEG of it with each person numbered left to right
  * }. Use trackDancer() from people.js to turn this into one dancer's frames.
  */
@@ -25,7 +25,6 @@ export async function processVideoFile(file, { fps = 30, onProgress } = {}) {
   closeLandmarker('upload')
   const landmarker = await getLandmarker('upload', { numPoses: MAX_PEOPLE })
   const raw = []
-  let people = 0, anchor = -1, snapshot = null
   const total = Math.floor(video.duration * fps)
   try {
     for (let i = 0; i <= total; i++) {
@@ -35,19 +34,19 @@ export async function processVideoFile(file, { fps = 30, onProgress } = {}) {
       const result = landmarker.detectForVideo(video, Math.round(t * 1000) + 1)
       const poses = dedupePoses((result.landmarks ?? []).map(toPose))
       raw.push({ t: Math.round(t * 1000) / 1000, poses })
-      if (poses.length > people) {
-        people = poses.length
-        anchor = raw.length - 1
-        snapshot = drawSnapshot(video, poses)
-      }
       onProgress?.(i / total)
     }
+    const { people, anchor } = crowdSize(raw)
+    if (people === 0) throw new Error('Could not find anyone in the video. Try better light and a plain background.')
+    // Grab the anchor frame again for the "who are we learning from?" picture.
+    video.currentTime = Math.min(raw[anchor].t + 0.001, video.duration)
+    await once(video, 'seeked')
+    const snapshot = drawSnapshot(video, raw[anchor].poses)
+    return { raw, aspect: video.videoWidth / video.videoHeight, people, anchor, snapshot }
   } finally {
     URL.revokeObjectURL(url)
     closeLandmarker('upload')
   }
-  if (people === 0) throw new Error('Could not find anyone in the video. Try better light and a plain background.')
-  return { raw, aspect: video.videoWidth / video.videoHeight, people, anchor, snapshot }
 }
 
 /** A still of the frame with a numbered badge over each person (left to right). */

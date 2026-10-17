@@ -43,6 +43,26 @@ export function dedupePoses(poses) {
   return kept
 }
 
+/**
+ * How many people the video really has: the most seen together in at least a
+ * few frames, so a one-frame glitch doesn't add a phantom dancer (and a second
+ * dancer who's on screen for a moment still counts). anchor = the clearest frame
+ * showing that many people.
+ */
+export function crowdSize(raw, minFrames = Math.min(8, Math.ceil(raw.length * 0.05))) {
+  for (let n = Math.max(0, ...raw.map((f) => f.poses.length)); n > 0; n--) {
+    const frames = raw.map((f, i) => [f, i]).filter(([f]) => f.poses.length >= n)
+    if (frames.length < Math.max(1, minFrames) && n > 1) continue
+    // Prefer frames with exactly n people, so the picture's badges match the buttons.
+    const exact = frames.filter(([f]) => f.poses.length === n)
+    if (exact.length) frames.splice(0, frames.length, ...exact)
+    const clarity = ([f]) => f.poses.reduce((s, pose) => s + pose.reduce((v, p) => v + (p[2] ?? 1), 0), 0)
+    const [, anchor] = frames.reduce((best, x) => (clarity(x) > clarity(best) ? x : best))
+    return { people: n, anchor }
+  }
+  return { people: 0, anchor: -1 }
+}
+
 /** Same people, ordered left to right as they appear in the video. */
 export function sortLeftToRight(poses) {
   return [...poses].sort((a, b) => poseCenter(a)[0] - poseCenter(b)[0])
@@ -97,6 +117,31 @@ export function trackDancer(raw, anchor, person) {
   const before = follow(range(anchor - 1, -1)).reverse()
   const after = follow(range(anchor + 1, raw.length))
   return [...before, { t: raw[anchor].t, pose: start }, ...after]
+}
+
+const SWITCH_JUMP = 0.1 // hips moving further than this between kept frames looks like a different person
+const SWITCH_SIZE = 0.3 // or the body suddenly getting 30% bigger/smaller
+
+/**
+ * How well trackDancer followed the dancer, so the person uploading can check it.
+ * coverage: share of the video (from the dancer's first to last frame) they were found in.
+ * suspects: times (seconds) where the track jumped, i.e. it may have switched to someone else.
+ */
+export function trackReport(raw, tracked) {
+  if (!tracked.length) return { coverage: 0, suspects: [] }
+  const first = tracked[0].t, last = tracked[tracked.length - 1].t
+  const span = raw.filter((f) => f.t >= first && f.t <= last).length
+  const suspects = []
+  for (let i = 1; i < tracked.length; i++) {
+    const a = tracked[i - 1].pose, b = tracked[i].pose
+    const [ax, ay] = poseCenter(a), [bx, by] = poseCenter(b)
+    const resized = Math.abs(poseSize(b) - poseSize(a)) / (poseSize(a) || 1)
+    if (Math.hypot(bx - ax, by - ay) > SWITCH_JUMP || resized > SWITCH_SIZE) {
+      const t = tracked[i].t
+      if (!suspects.length || t - suspects[suspects.length - 1] > 1) suspects.push(t)
+    }
+  }
+  return { coverage: tracked.length / (span || 1), suspects }
 }
 
 /** Shift times so the dance starts at 0; returns how much was trimmed. */

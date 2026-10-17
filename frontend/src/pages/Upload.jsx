@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { buildDance } from '../lib/dance.js'
-import { processVideoFile } from '../lib/processVideo.js'
-import { rebase, trackDancer } from '../lib/people.js'
+import { PERSON_COLORS, processVideoFile } from '../lib/processVideo.js'
+import { rebase, trackDancer, trackReport } from '../lib/people.js'
+import DancerCheck from '../components/DancerCheck.jsx'
 import StepEditor from '../components/StepEditor.jsx'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
 
@@ -21,6 +22,8 @@ export default function Upload() {
   const [progress, setProgress] = useState(null)
   const [dance, setDance] = useState(null)
   const [picking, setPicking] = useState(null) // processed video with several people in it
+  const [check, setCheck] = useState(null) // the chosen dancer, before they're confirmed
+  const [crowd, setCrowd] = useState(null) // the multi-person video the current lesson came from
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   // Local preview of the chosen file, for the step editor.
@@ -46,12 +49,17 @@ export default function Upload() {
     setError(null)
     setDance(null)
     setPicking(null)
+    setCheck(null)
+    setCrowd(null)
     setProgress(0)
     try {
       const result = await processVideoFile(file, { onProgress: setProgress })
-      // More than one person: ask who to learn from before building the lesson.
+      // More than one person: always ask who to learn from, then let them check it.
       if (result.people > 1) setPicking(result)
-      else buildFrom(result, 0)
+      else {
+        const tracked = follow(result, 0)
+        if (tracked) build(result, tracked)
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -59,15 +67,37 @@ export default function Upload() {
     }
   }
 
-  /** Follow the chosen dancer (0 = leftmost) and turn their moves into a lesson. */
-  function buildFrom(result, person) {
+  /** Follow one dancer (0 = leftmost) through the video; null if they're barely in it. */
+  function follow(result, person) {
     const tracked = trackDancer(result.raw, result.anchor, person)
     if (tracked.length < 30) {
-      setError("Couldn't follow that dancer for long enough. Try a clip where they stay in frame.")
-      return
+      setError("Couldn't follow that dancer for long enough. Try a clip where they stay in frame, or pick someone else.")
+      return null
     }
+    return tracked
+  }
+
+  /** Picked from several people: show who we're following so they can check it. */
+  function choose(result, person) {
+    setError(null)
+    const tracked = follow(result, person)
+    if (!tracked) return
+    setPicking(null)
+    setCheck({ result, person, tracked, report: trackReport(result.raw, tracked) })
+  }
+
+  function chooseAgain(result) {
+    setCheck(null)
+    setDance(null)
+    setPicking(result)
+  }
+
+  /** Turn the followed dancer's moves into a lesson. */
+  function build(result, tracked) {
     const { frames, trimmed } = rebase(tracked)
     setPicking(null)
+    setCheck(null)
+    setCrowd(result.people > 1 ? result : null)
     setDance(buildDance({
       name: name || file.name.replace(/\.[^.]+$/, ''),
       bpm: Number(bpm),
@@ -172,10 +202,31 @@ export default function Upload() {
           <img src={picking.snapshot} alt={`Video frame with ${picking.people} people, numbered left to right`} className="people-snapshot" />
           <div className="row people-picks">
             {Array.from({ length: picking.people }, (_, i) => (
-              <button key={i} type="button" className={`btn-pink person-${i}`} onClick={() => buildFrom(picking, i)}>
+              <button key={i} type="button" className={`btn-pink person-${i}`} onClick={() => choose(picking, i)}>
                 DANCER {i + 1}{i === 0 ? ' (LEFT)' : i === picking.people - 1 ? ' (RIGHT)' : ''}
               </button>
             ))}
+          </div>
+        </Win>
+      )}
+
+      {check && (
+        <Win title="CHECK_YOUR_DANCER.exe" color="lime" className="upload-win">
+          <p className="script pink">quick check ↓</p>
+          <h2 className="section-title small">Is this who you want to learn from?</h2>
+          <p className="muted">
+            Press play: Dancer {check.person + 1} is drawn in their colour, everyone else is faint.
+            Make sure the coloured skeleton stays on the same person the whole way through.
+          </p>
+          <DancerCheck src={fileUrl} aspect={check.result.aspect} raw={check.result.raw} tracked={check.tracked}
+            color={PERSON_COLORS[check.person % PERSON_COLORS.length]} suspects={check.report.suspects} />
+          <p className="dancer-coverage">
+            👀 We could see Dancer {check.person + 1} in <b>{Math.round(check.report.coverage * 100)}%</b> of their part of the video
+            {check.report.coverage < 0.8 ? ' (they were hidden or blocked a lot: scores may be patchy)' : ''}.
+          </p>
+          <div className="row people-picks">
+            <button type="button" className="btn-teal" onClick={() => build(check.result, check.tracked)}>✓ YES, THAT'S THEM</button>
+            <button type="button" className="btn-orange" onClick={() => chooseAgain(check.result)}>↺ PICK A DIFFERENT DANCER</button>
           </div>
         </Win>
       )}
@@ -187,6 +238,11 @@ export default function Upload() {
             We split it into {dance.steps.length} {dance.steps.length === 1 ? 'step' : 'steps'} automatically
             (8 counts each). Happy with that? Save it. Want different steps? Edit them below.
           </p>
+          {crowd && (
+            <p className="muted">
+              Wrong person? <button type="button" className="link-btn" onClick={() => chooseAgain(crowd)}>choose a different dancer</button>
+            </p>
+          )}
           <StepEditor key={dance.frames.length} dance={dance} videoSrc={fileUrl} onChange={setSteps} />
           <button className="btn-teal wide" onClick={save} disabled={saving}>
             {saving ? 'saving…' : replacing ? `replace ${replacing.name} & practice →` : 'save & practice →'}

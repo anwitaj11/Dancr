@@ -6,7 +6,7 @@ import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
 import { ALL_CUES, ENCOURAGEMENT, averageWindow, pickCue } from './cues.js'
-import { dedupePoses, pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer } from './people.js'
+import { crowdSize, dedupePoses, pickLargest, poseCenter, rebase, sortLeftToRight, trackDancer, trackReport } from './people.js'
 
 describe('angles', () => {
   it('measures the angle at the middle point', () => {
@@ -339,5 +339,40 @@ describe('dedupePoses', () => {
   })
   it('keeps dancers standing apart', () => {
     expect(dedupePoses([body(0.2), body(0.5), body(0.8)])).toHaveLength(3)
+  })
+})
+
+describe('crowdSize', () => {
+  const body = (x) => Array.from({ length: 15 }, (_, i) => [x, 0.2 + i * 0.04, 0.9])
+  const frames = (n, people) => Array.from({ length: n }, (_, i) => ({ t: i / 30, poses: people.map(body) }))
+  it('ignores a one-frame phantom person', () => {
+    const raw = [...frames(40, [0.5]), ...frames(1, [0.3, 0.5]), ...frames(40, [0.5])]
+    expect(crowdSize(raw).people).toBe(1)
+  })
+  it('counts dancers seen together, anchored on a frame showing all of them', () => {
+    const raw = [...frames(20, [0.5]), ...frames(20, [0.2, 0.5, 0.8])]
+    const { people, anchor } = crowdSize(raw)
+    expect(people).toBe(3)
+    expect(raw[anchor].poses).toHaveLength(3)
+  })
+  it('finds nobody in an empty video', () => {
+    expect(crowdSize(frames(10, [])).people).toBe(0)
+  })
+})
+
+describe('trackReport', () => {
+  const body = (x) => Array.from({ length: 15 }, (_, i) => [x, 0.2 + i * 0.04, 0.9])
+  it('flags the moment the track jumps to someone else', () => {
+    const raw = Array.from({ length: 60 }, (_, i) => ({ t: i / 30, poses: [body(0.3)] }))
+    const tracked = raw.map((f, i) => ({ t: f.t, pose: body(i < 30 ? 0.3 : 0.7) }))
+    const report = trackReport(raw, tracked)
+    expect(report.coverage).toBe(1)
+    expect(report.suspects).toEqual([1])
+  })
+  it('reports how much of the video the dancer was found in', () => {
+    const raw = Array.from({ length: 10 }, (_, i) => ({ t: i / 30, poses: [body(0.3)] }))
+    const tracked = raw.filter((_, i) => i % 2 === 0).map((f) => ({ t: f.t, pose: body(0.3) }))
+    expect(trackReport(raw, tracked).coverage).toBeCloseTo(5 / 9)
+    expect(trackReport(raw, tracked).suspects).toEqual([])
   })
 })
