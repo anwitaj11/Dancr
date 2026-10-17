@@ -126,6 +126,17 @@ export default function Upload() {
             {file ? 'choose a different video' : 'choose my video'}
           </button>
           <span className="drop-types">MP4 · MOV · WEBM · MAX 200MB</span>
+          <details className="video-tips">
+            <summary>📱 How do I get a video from TikTok, Reels or YouTube?</summary>
+            <ul>
+              <li><b>TikTok:</b> tap <b>Share → Save video</b> (only works if the creator allows downloads).</li>
+              <li><b>Instagram Reels:</b> use your phone's <b>screen recording</b> while the reel plays.</li>
+              <li><b>YouTube:</b> use <b>screen recording</b> too, and play it full-screen so the dancer is big.</li>
+              <li><b>Best of all:</b> film yourself or a friend doing the dance: full body in frame, phone propped still.</li>
+              <li>Then send it to your computer (AirDrop works great) and drop it here.</li>
+            </ul>
+            <p>We don't take links: TikTok, Instagram and YouTube don't allow other apps to download their videos, and most clips belong to the dancers who posted them. Only save videos you have permission to use.</p>
+          </details>
         </div>
 
         <div className="upload-form">

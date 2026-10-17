@@ -260,6 +260,10 @@ main.immersive { padding: 0; }
 .drop-icon i { position: absolute; top: -18px; right: -18px; font-style: normal; font-size: 2rem; color: var(--yellow); -webkit-text-stroke: 2px var(--ink); }
 .drop-title { font-family: var(--display); font-weight: 400; font-size: clamp(1.8rem, 4.5vw, 3.2rem); line-height: 1; color: #fff; -webkit-text-stroke: 0.08em var(--ink); paint-order: stroke fill; text-shadow: 0.05em 0.05em 0 var(--hot); word-break: break-word; }
 .drop-sub { background: var(--yellow); padding: 3px 10px; font-family: var(--mono); font-weight: 700; font-size: 0.85rem; }
+.video-tips { max-width: 620px; text-align: left; background: #fff; border: 2px solid var(--ink); box-shadow: var(--shadow-sm); padding: 10px 16px; }
+.video-tips summary { cursor: pointer; font-weight: 900; }
+.video-tips ul { margin: 10px 0; padding-left: 20px; line-height: 1.6; }
+.video-tips p { margin: 0; font-size: 0.82rem; color: var(--muted); }
 .drop-types { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); letter-spacing: 0.1em; }
 .upload-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 18px; padding-top: 20px; }
 .upload-form label { display: flex; flex-direction: column; gap: 6px; font-weight: 700; font-size: 0.85rem; }
