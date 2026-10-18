@@ -140,6 +140,8 @@ export default function Practice() {
   const { id } = useParams()
   const user = currentUser()
   const [dance, setDance] = useState(null)
+  const [danceError, setDanceError] = useState(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [profile, setProfile] = useState(null)
   const [chunkCounts, setChunkCounts] = useState(8)
   const [chunkIdx, setChunkIdx] = useState(0)
@@ -187,7 +189,18 @@ export default function Practice() {
   const lastCueBeat = useRef(0)
 
   useEffect(() => {
-    api.getDance(id).then((d) => { setDance(refreshAngles(d.data)); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
+    let active = true
+    setDance(null)
+    setDanceError(null)
+    api.getDance(id).then((d) => {
+      if (!active) return
+      if (!d?.data?.frames?.length || !d.data.steps?.length) {
+        throw new Error('This dance has no usable movement steps. Please re-upload or edit its steps.')
+      }
+      setDance(refreshAngles(d.data))
+      setHasVideo(d.hasVideo)
+      setDifficulty(d.difficulty)
+    }).catch((e) => { if (active) setDanceError(e.message) })
     // Count-in first (needed soonest), then the spoken cues, all in the ElevenLabs voice.
     preloadCounts().then(() => preloadLines(['Step complete!', 'You nailed it!', ...ALL_CUES]))
     api.getProfile(user).then((p) => {
@@ -195,8 +208,8 @@ export default function Practice() {
       setChunkCounts(p.adaptations.chunkCounts)
       setSpeed(nearestSpeed(p.adaptations.speed))
     }).catch(() => {})
-    return () => timers.current.forEach(clearTimeout)
-  }, [id, user])
+    return () => { active = false; timers.current.forEach(clearTimeout) }
+  }, [id, user, loadAttempt])
 
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
   // Video with several people: mark the one this lesson follows.
