@@ -43,6 +43,55 @@ def _people_path(dance_id: int) -> Path:
     return MEDIA_DIR / f"{dance_id}.people.json"
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Verify Supabase access tokens with the Auth service, never trust a username supplied
+# by the browser. Protected routes can access request.state.account_id.
+@app.middleware("http")
+async def authenticate(request: Request, call_next):
+    from fastapi.responses import JSONResponse
+    if request.method == "OPTIONS" or request.url.path.startswith("/health"):
+        return await call_next(request)
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "Please sign in."})
+    config = _storage_config()
+    if not config:
+        return JSONResponse(status_code=503, content={"detail": "Authentication is not configured."})
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{config[0]}/auth/v1/user",
+                headers={"apikey": config[1], "Authorization": header},
+            )
+        if response.status_code != 200:
+            return JSONResponse(status_code=401, content={"detail": "Session expired. Sign in again."})
+        account_id = response.json().get("id")
+        if not account_id:
+            return JSONResponse(status_code=401, content={"detail": "Invalid account."})
+        request.state.account_id = account_id
+        return await call_next(request)
+    except httpx.HTTPError:
+        return JSONResponse(status_code=503, content={"detail": "Authentication service unavailable."})
+
+
+def _owner(request: Request):
+    return request.state.account_id
+
+
+def _assert_readable(conn, dance_id: int, account_id: str):
+    row = conn.execute("SELECT owner_id FROM dances WHERE id = ?", (dance_id,)).fetchone()
+    if not row or (row["owner_id"] is not None and str(row["owner_id"]) != account_id):
+        raise HTTPException(404, "dance not found")
+
+
+def _assert_owned(conn, dance_id: int, account_id: str):
+    row = conn.execute("SELECT owner_id FROM dances WHERE id = ?", (dance_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "dance not found")
+    if str(row["owner_id"] or "") != account_id:
+        raise HTTPException(403, "You can only change your own dances")
+
+
+
 
 
 # Private Supabase Storage; server-side secret never reaches the browser.
@@ -90,13 +139,12 @@ def _signed_storage_url(path, expires=3600):
 
 
 @app.post("/dances/{dance_id}/video-upload")
-def create_video_upload(dance_id: int, content_type: str = "video/mp4"):
+def create_video_upload(dance_id: int, request: Request, content_type: str = "video/mp4"):
     ext = VIDEO_TYPES.get(content_type)
     if not ext:
         raise HTTPException(415, "unsupported video type")
     with session() as conn:
-        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
-            raise HTTPException(404, "dance not found")
+        _assert_owned(conn, dance_id, _owner(request))
     config = _storage_config()
     if not config:
         raise HTTPException(503, "Supabase storage not configured")
@@ -119,13 +167,12 @@ class VideoUploaded(BaseModel):
 
 
 @app.post("/dances/{dance_id}/video-complete")
-def video_complete(dance_id: int, body: VideoUploaded):
+def video_complete(dance_id: int, body: VideoUploaded, request: Request):
     if not re.fullmatch(rf"dances/{dance_id}/[0-9]+\.(mp4|mov|webm)", body.path):
         raise HTTPException(400, "invalid video path")
     with session() as conn:
+        _assert_owned(conn, dance_id, _owner(request))
         row = conn.execute("SELECT data FROM dances WHERE id = ?", (dance_id,)).fetchone()
-        if not row:
-            raise HTTPException(404, "dance not found")
         data = loads(row["data"], {})
         data["_videoPath"] = body.path
         conn.execute("UPDATE dances SET data = ? WHERE id = ?", (json.dumps(data), dance_id))
@@ -170,25 +217,26 @@ class RemixIn(BaseModel):
 # ---------- dances ----------
 
 @app.post("/dances")
-def create_dance(dance: DanceIn):
+def create_dance(dance: DanceIn, request: Request):
     with session() as conn:
         cur = conn.execute(
-            "INSERT INTO dances (name, bpm, builtin, difficulty, data) VALUES (?, ?, ?, ?, ?)",
-            (dance.name, dance.bpm, int(dance.builtin), dance.difficulty, json.dumps(dance.data)),
+            "INSERT INTO dances (name, bpm, builtin, difficulty, data, owner_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (dance.name, dance.bpm, 0, dance.difficulty, json.dumps(dance.data), _owner(request)),
         )
         return {"id": cur.lastrowid}
 
 
 @app.get("/dances")
-def list_dances():
+def list_dances(request: Request):
     """Library listing: metadata plus step count, without the heavy frame data."""
     with session() as conn:
-        rows = conn.execute("SELECT * FROM dances ORDER BY builtin DESC, difficulty, id").fetchall()
+        rows = conn.execute("SELECT * FROM dances WHERE owner_id IS NULL OR owner_id = ? ORDER BY builtin DESC, difficulty, id", (_owner(request),)).fetchall()
     out = []
     for r in rows:
         data = loads(r["data"], {})
         out.append({
             "id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
+            "mine": str(r["owner_id"] or "") == _owner(request),
             "difficulty": r["difficulty"], "steps": len(data.get("steps", [])),
             "duration": data["frames"][-1]["t"] if data.get("frames") else 0,
             "hasVideo": bool(data.get("_videoPath")) or _video_path(r["id"]) is not None,
@@ -204,10 +252,11 @@ class DanceUpdate(BaseModel):
 
 
 @app.put("/dances/{dance_id}")
-def replace_dance(dance_id: int, dance: DanceUpdate):
+def replace_dance(dance_id: int, dance: DanceUpdate, request: Request):
     """Swap in a new recording for an existing dance (e.g. a placeholder built-in),
     keeping its id, library slot, difficulty and everyone's attempt history."""
     with session() as conn:
+        _assert_owned(conn, dance_id, _owner(request))
         cur = conn.execute("UPDATE dances SET name = ?, bpm = ?, data = ? WHERE id = ?",
                            (dance.name, dance.bpm, json.dumps(dance.data), dance_id))
         if cur.rowcount == 0:
@@ -216,9 +265,10 @@ def replace_dance(dance_id: int, dance: DanceUpdate):
 
 
 @app.delete("/dances/{dance_id}")
-def delete_dance(dance_id: int):
+def delete_dance(dance_id: int, request: Request):
     """Remove a dance from the library, with its video and the attempts made on it."""
     with session() as conn:
+        _assert_owned(conn, dance_id, _owner(request))
         conn.execute("DELETE FROM attempts WHERE dance_id = ?", (dance_id,))
         cur = conn.execute("DELETE FROM dances WHERE id = ?", (dance_id,))
         if cur.rowcount == 0:
@@ -230,10 +280,12 @@ def delete_dance(dance_id: int):
 
 
 @app.get("/dances/{dance_id}")
-def get_dance(dance_id: int):
+def get_dance(dance_id: int, request: Request):
     with session() as conn:
         r = conn.execute("SELECT * FROM dances WHERE id = ?", (dance_id,)).fetchone()
     if not r:
+        raise HTTPException(404, "dance not found")
+    if r["owner_id"] is not None and str(r["owner_id"]) != _owner(request):
         raise HTTPException(404, "dance not found")
     return {"id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
             "difficulty": r["difficulty"], "hasVideo": bool(loads(r["data"], {}).get("_videoPath")) or _video_path(dance_id) is not None,
@@ -395,8 +447,10 @@ def build_profile(conn, name: str) -> dict:
 
 
 @app.post("/attempts")
-def create_attempt(a: AttemptIn):
+def create_attempt(a: AttemptIn, request: Request):
+    a.user = _owner(request)
     with session() as conn:
+        _assert_readable(conn, a.dance_id, _owner(request))
         user_id = get_or_create_user(conn, a.user)
         conn.execute(
             """INSERT INTO attempts (user_id, dance_id, step_index, overall, joint_scores,
@@ -413,7 +467,9 @@ def create_attempt(a: AttemptIn):
 
 
 @app.get("/profile/{user}")
-def get_profile(user: str):
+def get_profile(user: str, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, 'Cannot access another account')
     with session() as conn:
         return build_profile(conn, user)
 
@@ -421,14 +477,17 @@ def get_profile(user: str):
 # ---------- AI coach ----------
 
 @app.post("/coach")
-def get_tip(body: CoachIn):
+def get_tip(body: CoachIn, request: Request):
+    body.user = _owner(request)
     with session() as conn:
         profile = build_profile(conn, body.user)
     return coach.tip(profile, body.context)
 
 
 @app.post("/report/{user}")
-def make_report(user: str):
+def make_report(user: str, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, 'Cannot access another account')
     with session() as conn:
         profile = build_profile(conn, user)
         result = coach.report(profile)
