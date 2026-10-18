@@ -485,4 +485,23 @@ def database_health():
         # Do not expose connection strings, hostnames, or credentials.
         from fastapi.responses import JSONResponse
         kind = type(exc).__name__
-        return JSONResponse(status_code=503, content={"database": "unavailable", "error_type": kind})
+        message = str(exc).lower()
+        if "password authentication failed" in message or "invalid password" in message:
+            cause = "authentication_failed"
+        elif "name or service not known" in message or "could not translate host" in message or "nodename nor servname" in message:
+            cause = "hostname_resolution_failed"
+        elif "network is unreachable" in message or "no route to host" in message:
+            cause = "network_unreachable"
+        elif "connection refused" in message:
+            cause = "connection_refused"
+        elif "timeout" in message or "timed out" in message:
+            cause = "connection_timeout"
+        elif "certificate" in message or "ssl" in message:
+            cause = "tls_error"
+        elif "database" in message and "does not exist" in message:
+            cause = "database_not_found"
+        elif "invalid" in message and ("uri" in message or "dsn" in message or "port" in message):
+            cause = "invalid_connection_string"
+        else:
+            cause = "other_connection_error"
+        return JSONResponse(status_code=503, content={"database": "unavailable", "error_type": kind, "cause": cause})
