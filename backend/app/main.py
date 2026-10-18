@@ -468,3 +468,21 @@ def voice_agent_session():
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+@app.get("/health/database")
+def database_health():
+    """Temporary non-sensitive connectivity check for deployment debugging."""
+    from .db import connect
+    try:
+        conn = connect()
+        try:
+            conn.execute("SELECT 1").fetchone()
+        finally:
+            conn.close()
+        return {"database": "connected"}
+    except Exception as exc:
+        # Do not expose connection strings, hostnames, or credentials.
+        from fastapi.responses import JSONResponse
+        kind = type(exc).__name__
+        return JSONResponse(status_code=503, content={"database": "unavailable", "error_type": kind})
