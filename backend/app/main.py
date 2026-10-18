@@ -112,7 +112,7 @@ class VideoUploaded(BaseModel):
 
 @app.post("/dances/{dance_id}/video-complete")
 def video_complete(dance_id: int, body: VideoUploaded):
-    if not re.fullmatch(rf"dances/{dance_id}/[0-9]+\\.(mp4|mov|webm)", body.path):
+    if not re.fullmatch(rf"dances/{dance_id}/[0-9]+\.(mp4|mov|webm)", body.path):
         raise HTTPException(400, "invalid video path")
     with session() as conn:
         row = conn.execute("SELECT data FROM dances WHERE id = ?", (dance_id,)).fetchone()
