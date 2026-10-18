@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { currentUser, setCurrentUser } from './lib/api.js'
+import { supabase } from './lib/supabase.js'
+import Login from './pages/Login.jsx'
 import { APP_NAME, Logo } from './components/Retro.jsx'
 import Library from './pages/Library.jsx'
 import Upload from './pages/Upload.jsx'
@@ -14,7 +16,7 @@ import VoiceCoach from './components/VoiceCoach.jsx'
 import { CoachContextProvider } from './lib/coachContext.jsx'
 
 function Shell() {
-  const [user, setUser] = useState(currentUser())
+  const user = currentUser()
   const { pathname } = useLocation()
   // Calibration is full-screen camera.
   const immersive = pathname.startsWith('/calibrate')
@@ -30,11 +32,8 @@ function Shell() {
             <NavLink to="/upload">Upload</NavLink>
             <NavLink to="/profile">My Practice</NavLink>
           </nav>
-          <label className="user" title="Your username">
-            <span>@</span>
-            <input aria-label="Your username" value={user}
-              onChange={(e) => { setUser(e.target.value); setCurrentUser(e.target.value || 'guest') }} />
-          </label>
+          <span className="user" title="Signed-in account">@{user.slice(0, 12)}</span>
+          <button type="button" className="link-btn" onClick={() => supabase.auth.signOut()}>Log out</button>
           <a href="/#dances" className="cta">Let's Dance! <span aria-hidden="true">→</span></a>
         </header>
       )}
@@ -62,6 +61,17 @@ function Shell() {
 }
 
 export default function App() {
+  const [session, setSession] = useState(undefined)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session)).catch(() => setSession(null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next)
+      setCurrentUser(next?.user?.id || 'guest')
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+  if (session === undefined) return <div className="page-loading"><div className="spinner" /></div>
+  if (!session) return <Login />
   return (
     <BrowserRouter>
       <CoachContextProvider>
