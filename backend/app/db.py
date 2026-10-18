@@ -1,6 +1,8 @@
 import json
 import os
 import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 from contextlib import contextmanager
 
 DB_PATH = os.getenv("DABLAB_DB", os.path.join(os.path.dirname(__file__), "..", "dablab.db"))
@@ -46,7 +48,45 @@ CREATE TABLE IF NOT EXISTS profiles (
 """
 
 
-def connect() -> sqlite3.Connection:
+class PgCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.rowcount = cursor.rowcount
+        self.lastrowid = None
+        if cursor.description and cursor.description[0].name == "id":
+            row = cursor.fetchone()
+            if row:
+                self.lastrowid = row["id"]
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+
+class PgConnection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql, params=()):
+        query = sql.replace("?", "%s")
+        inserting = query.lstrip().upper().startswith("INSERT INTO")
+        if inserting and "RETURNING" not in query.upper():
+            query += " RETURNING user_id AS id" if "INSERT INTO profiles" in query else " RETURNING id"
+        cursor = self._conn.execute(query, params)
+        return PgCursor(cursor) if inserting else cursor
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
+def connect():
+    if os.getenv('DATABASE_URL'):
+        return PgConnection(psycopg.connect(os.environ['DATABASE_URL'], row_factory=dict_row))
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -64,11 +104,13 @@ def session():
 
 
 def init_db() -> None:
+    if os.getenv('DATABASE_URL'):
+        return
     with session() as conn:
         conn.executescript(SCHEMA)
 
 
-def get_or_create_user(conn: sqlite3.Connection, name: str) -> int:
+def get_or_create_user(conn, name: str) -> int:
     row = conn.execute("SELECT id FROM users WHERE name = ?", (name,)).fetchone()
     if row:
         return row["id"]
