@@ -6,7 +6,7 @@ async function send(url, init) {
   try {
     return await fetch(url, init)
   } catch {
-    throw new Error(`can't reach the Dancr backend at ${API_URL}. Is the backend window running (uvicorn app.main:app --reload)?`)
+    throw new Error(`Can't connect to the Dancr API at ${API_URL}. Check the hosted backend or your network connection.`)
   }
 }
 
