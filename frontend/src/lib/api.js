@@ -1,3 +1,4 @@
+import { supabase } from './supabase.js'
 export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
 
 // fetch() only throws when the request never got an answer, almost always because
@@ -11,9 +12,10 @@ async function send(url, init) {
 }
 
 async function request(path, { method = 'GET', body } = {}) {
+  const { data: { session } } = await supabase.auth.getSession()
   const res = await send(`${API_URL}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -53,13 +55,13 @@ export const api = {
   },
   // Saved multi-person scan: null when the dance doesn't have one (older uploads).
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
-  getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
+  getPeople: (id) => request(`/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   // The dancer's latest recorded try (one per user, replaced each time).
   saveTake: (user, blob, meta) =>
     send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
       method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
     }),
-  getTake: (user) => send(`${API_URL}/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)),
+  getTake: (user) => request(`/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
   deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
