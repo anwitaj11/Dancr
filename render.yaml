@@ -1,0 +1,34 @@
+# Dancr Render Blueprint (feature branch demo only)
+# Connect the GitHub repo to Render, then create services using this Blueprint.
+services:
+  - type: web
+    name: dancr-demo-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /dances
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        value: https://iymbuopdpdzxkdzhuuoi.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: DABLAB_AUDIO_CACHE
+        value: /tmp/dancr-audio
+  - type: web
+    name: dancr-demo
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
