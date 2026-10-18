@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS dances (
     builtin    INTEGER NOT NULL DEFAULT 0,
     difficulty INTEGER NOT NULL DEFAULT 1,
     data       TEXT NOT NULL,  -- full dance JSON (see docs/dance-format.md)
+    owner_id   TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
