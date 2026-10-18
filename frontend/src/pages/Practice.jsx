@@ -504,7 +504,15 @@ export default function Practice() {
   ].filter(Boolean).join(' ') : '')
 
   if (!isCalibrated()) return <Navigate to={`/calibrate?next=/practice/${id}`} replace />
-  if (!dance) return <div className="page-loading"><div className="spinner" /></div>
+  if (!dance) return danceError ? (
+    <section className="page-loading">
+      <div className="note-card warn" role="alert">
+        <p>Couldn't load this dance: {danceError}</p>
+        <button type="button" className="btn-pink" onClick={() => setLoadAttempt((n) => n + 1)}>Try loading again ↻</button>
+        <p><Link to="/">← Back to dance library</Link></p>
+      </div>
+    </section>
+  ) : <div className="page-loading"><div className="spinner" /></div>
 
   const patterns = profile?.patterns ?? []
   const ringValue = live?.overall ?? result?.overall ?? 0
