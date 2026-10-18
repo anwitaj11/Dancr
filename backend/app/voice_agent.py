@@ -40,11 +40,11 @@ class VoiceAgentError(Exception):
 
 
 def session() -> dict:
-    agent_id = _env("ELEVENLABS_AGENT_ID")
+    agent_id = _env("ELEVENLABS_AGENT_ID") or _env("AgentID")
     if not agent_id:
         raise VoiceAgentError(503, "The voice coach isn't set up yet: add ELEVENLABS_AGENT_ID to backend/.env.")
 
-    api_key = _env("ELEVENLABS_API_KEY")
+    api_key = _env("ELEVENLABS_API_KEY") or _env("ElevenLabsAPI")
     if not api_key:
         return {"mode": "public", "agentId": agent_id}
 
