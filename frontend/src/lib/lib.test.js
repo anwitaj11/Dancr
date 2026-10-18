@@ -5,7 +5,7 @@ import { LoopStats, MotionMeter, countAt, jointScore, jointWeights, matchWithTim
 import { demoDances } from './demoDances.js'
 import { PRESETS, remixDance } from './remix.js'
 import { JOINT_NAMES, P } from './joints.js'
-import { ALL_CUES, ENCOURAGEMENT, averageWindow, pickCue } from './cues.js'
+import { ALL_CUES, ENCOURAGEMENT, MOVE_MORE, averageWindow, pickCue } from './cues.js'
 import { crowdSize, dedupePoses, pickLargest, poseCenter, poseAt, rebase, sortLeftToRight, trackDancer, trackReport } from './people.js'
 
 describe('angles', () => {
@@ -287,7 +287,7 @@ describe('spoken cues', () => {
       { joints: { leftKnee: 1 }, diffs: { leftKnee: 10 }, overall: 1 },
       { joints: { leftKnee: 0.5, leftAnkle: 0.4 }, diffs: { leftKnee: -10, leftAnkle: 30 }, overall: 0.4 },
     ])
-    expect(w).toEqual({ joints: { leftKnee: 0.75, leftAnkle: 0.4 }, diffs: { leftKnee: 0, leftAnkle: 30 }, overall: 0.7 })
+    expect(w).toEqual({ joints: { leftKnee: 0.75, leftAnkle: 0.4 }, diffs: { leftKnee: 0, leftAnkle: 30 }, overall: 0.7, motion: 1 })
   })
 
   it('has audio-ready phrases for every cue', () => {
@@ -321,6 +321,37 @@ describe('standing still is not dancing', () => {
     expect(moving.ratio()).toBeGreaterThan(0.85)
     expect(withMotion(1, still.ratio())).toBeLessThan(0.3)
     expect(withMotion(1, moving.ratio())).toBeGreaterThan(0.9)
+  })
+
+  it("doesn't count joints the camera can't see as standing still", () => {
+    const m = new MotionMeter()
+    for (let i = 0; i < 20; i++) {
+      const ref = { leftElbow: 90 + 60 * Math.sin(i), leftAnkle: 100 + 40 * Math.sin(i) }
+      m.add(i / 10, { leftElbow: 90 + 60 * Math.sin(i) }, ref) // feet out of frame
+    }
+    expect(m.ratio()).toBe(1)
+  })
+
+  it('gives full movement credit a little before matching the recording exactly', () => {
+    const m = new MotionMeter()
+    for (let i = 0; i < 20; i++) m.add(i / 10, { leftElbow: 90 + 50 * Math.sin(i) }, { leftElbow: 90 + 60 * Math.sin(i) })
+    expect(m.ratio()).toBe(1) // 83% of the tutorial's travel
+  })
+
+  it('keeps pose match and movement apart in the summary', () => {
+    const stats = new LoopStats()
+    stats.add({ count: 1, joints: { leftElbow: 1 }, overall: 0.5, offset: 0, shape: 1, motion: 0.33 })
+    stats.add({ count: 2, joints: { leftElbow: 1 }, overall: 0.5, offset: 0, shape: 1, motion: 0.33 })
+    const sum = stats.summary()
+    expect(sum.shape).toBe(1)
+    expect(sum.motion).toBeCloseTo(0.33)
+    expect(sum.overall).toBe(0.5)
+  })
+
+  it('tells a dancer with good shapes but little movement to go bigger', () => {
+    const window = { joints: { leftElbow: 0.95 }, diffs: { leftElbow: 3 }, overall: 0.5, motion: 0.3 }
+    expect(pickCue(window)).toBe(MOVE_MORE)
+    expect(ALL_CUES).toContain(MOVE_MORE)
   })
 
   it("doesn't punish holding still while the tutorial holds still", () => {

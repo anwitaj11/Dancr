@@ -46,6 +46,8 @@ function savePreviewPref(on) {
 }
 
 /** Remembered on/off settings (music, spoken cues); on unless turned off. */
+const LOW_MOTION_TIP = 0.85 // below this, the results tip is about moving more
+
 function loadFlag(key) {
   try {
     return localStorage.getItem(key) !== 'off'
@@ -353,7 +355,12 @@ export default function Practice() {
     }
     api.saveAttempt(attempt).then(setProfile).catch(() => {})
 
-    if (!summary.passed) {
+    // Poses right but too little movement: say that, not "fix your elbow".
+    if (!summary.passed && summary.motion < LOW_MOTION_TIP && summary.shape >= 0.8) {
+      const text = `Your shapes are spot on (${pct(summary.shape)})! You moved ${pct(summary.motion)} as much as the tutorial, so go bigger and dance every count full out.`
+      setTip(text)
+      speak('Your shapes are spot on! Now go bigger and dance it full out.')
+    } else if (!summary.passed) {
       const context = {
         score: summary.overall, weakestJoint: summary.weakestJoint,
         timingOffset: summary.timingOffset, worstCount: summary.worstCount,
@@ -404,11 +411,12 @@ export default function Practice() {
       const t = refTime()
       const match = matchWithTiming(angles, dance.frames, t, { mirror, joints: scoredJoints, weights })
       // Standing still while the tutorial dances scores low, however good the pose.
-      let score = match.overall
+      let score = match.overall, moved = 1
       if (dancing) {
         const refNow = sampleAt(dance.frames, t).angles
         motion.current.add(performance.now() / 1000, angles, mirror ? mirrorAngles(refNow) : refNow)
-        score = withMotion(match.overall, motion.current.ratio())
+        moved = motion.current.ratio()
+        score = withMotion(match.overall, moved)
       }
       if (skeletonMode !== 'off') {
         // Same selfie flip and crop as the video, so limbs line up with the body.
@@ -422,8 +430,8 @@ export default function Practice() {
       }
       if (dancing) {
         const count = countAt(t, dance.bpm, dance.countStart)
-        stats.current.add({ count, joints: match.joints, overall: score, offset: match.offset })
-        cueSamples.current.push({ joints: match.joints, diffs: match.diffs, overall: score })
+        stats.current.add({ count, joints: match.joints, overall: score, offset: match.offset, shape: match.overall, motion: moved })
+        cueSamples.current.push({ joints: match.joints, diffs: match.diffs, overall: score, motion: moved })
         setLive({ overall: score, offset: match.offset, count, parts: partScores(match.joints) })
       }
       // Burn the score into the frame so it shows up in Vine recordings.
@@ -693,6 +701,22 @@ export default function Practice() {
                 </div>
               </div>
               {tip && <p className="coach-bubble"><span>🎙️</span>{tip}</p>}
+              <div className="score-split">
+                <div className="joint-row">
+                  <span>🧍 pose match</span>
+                  <div className="bar"><div style={{ width: `${result.shape * 100}%`, background: colorFor(result.shape) }} /></div>
+                  <b>{Math.round(result.shape * 100)}</b>
+                </div>
+                <div className="joint-row">
+                  <span>💃 movement</span>
+                  <div className="bar"><div style={{ width: `${result.motion * 100}%`, background: colorFor(result.motion) }} /></div>
+                  <b>{Math.round(result.motion * 100)}</b>
+                </div>
+                <p className="muted small">
+                  Your score is your pose match, lowered when you move less than the tutorial
+                  (100 movement = as much as the dancer in the video).
+                </p>
+              </div>
               <div className="joint-grid">
                 {Object.entries(result.joints).map(([j, s]) => (
                   <div key={j} className="joint-row">

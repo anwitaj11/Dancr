@@ -7,6 +7,8 @@ const GREAT = 0.8
 
 export const ENCOURAGEMENT = ['Yes! Keep it up!', 'Nice! That looks great!', "You're nailing it!", 'So clean! Keep going!']
 export const ALMOST = ["Good! You're so close!", 'Nice energy, keep matching the shape!']
+export const MOVE_MORE = 'Bigger moves! Dance it full out!'
+const LOW_MOTION = 0.6 // moving less than this share of the tutorial = told to go bigger
 
 // [phrase when the dancer's angle is too small, phrase when it's too big]
 // Angles grow as a joint straightens (elbow, knee), as the arm lifts away from the
@@ -28,19 +30,21 @@ const FIXES = {
 }
 
 /** Every phrase pickCue can say, for preloading the audio. */
-export const ALL_CUES = [...ENCOURAGEMENT, ...ALMOST, ...new Set(Object.values(FIXES).flat())]
+export const ALL_CUES = [...ENCOURAGEMENT, ...ALMOST, MOVE_MORE, ...new Set(Object.values(FIXES).flat())]
 
 /**
  * Choose what to say about the last few counts.
- * window: { joints: {name: 0–1}, diffs: {name: degrees}, overall: 0–1 } averaged over the window.
+ * window: { joints: {name: 0–1}, diffs: {name: degrees}, overall: 0–1, motion?: 0–1 } averaged over the window.
  * Returns a phrase, or null to stay quiet. Never repeats lastCue back to back.
  */
-export function pickCue({ joints, diffs, overall }, lastCue = null, random = Math.random) {
+export function pickCue({ joints, diffs, overall, motion = 1 }, lastCue = null, random = Math.random) {
   const worst = Object.keys(joints).filter((j) => FIXES[j] && j in diffs).sort((a, b) => joints[a] - joints[b])[0]
   if (worst && joints[worst] < CLOSE_ENOUGH) {
     const fix = FIXES[worst][diffs[worst] < 0 ? 0 : 1]
     if (fix !== lastCue) return fix
   }
+  // Right shapes but barely moving: the fix is energy, not a body part.
+  if (motion < LOW_MOTION && lastCue !== MOVE_MORE) return MOVE_MORE
   const pool = overall >= GREAT ? ENCOURAGEMENT : overall >= 0.6 ? ALMOST : null
   if (!pool) return null
   const options = pool.filter((p) => p !== lastCue)
@@ -61,5 +65,6 @@ export function averageWindow(samples) {
     joints: avg('joints'),
     diffs: avg('diffs'),
     overall: samples.reduce((sum, s) => sum + s.overall, 0) / (samples.length || 1),
+    motion: samples.reduce((sum, s) => sum + (s.motion ?? 1), 0) / (samples.length || 1),
   }
 }

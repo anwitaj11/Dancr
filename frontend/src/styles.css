@@ -594,3 +594,8 @@ main.immersive { padding: 0; }
 .take-duet figcaption { position: absolute; top: 8px; left: 8px; padding: 2px 8px; background: var(--hot); color: #fff; border: 2px solid var(--ink); font-family: var(--mono); font-weight: 900; font-size: 0.72rem; }
 .take-duet figure + figure figcaption { background: var(--blue); }
 @media (max-width: 560px) { .take-duet { gap: 6px; } }
+
+.score-split { margin: 10px 0 14px; padding: 10px 12px; border: 2px dashed var(--ink); background: #fffbe6; }
+.score-split .joint-row { grid-template-columns: 130px 1fr 32px; }
+.score-split .joint-row span { font-weight: 900; }
+.score-split p { margin: 6px 0 0; }

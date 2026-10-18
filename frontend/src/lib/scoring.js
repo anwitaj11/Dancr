@@ -64,6 +64,8 @@ export function jointWeights(frames, start, end, { full = 40, min = 0.15 } = {})
  * the last couple of seconds. ratio() is ~1 when they move as much (or more),
  * and drops toward 0 when they stand still while the tutorial dances.
  */
+const FULL_MOTION = 0.8
+
 export class MotionMeter {
   constructor(windowSec = 2) {
     this.windowSec = windowSec
@@ -73,19 +75,31 @@ export class MotionMeter {
     this.samples.push({ t, user: userAngles, ref: refAngles })
     while (this.samples.length && this.samples[0].t < t - this.windowSec) this.samples.shift()
   }
-  static travel(samples, key) {
-    let total = 0
-    for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1][key], b = samples[i][key]
-      for (const j of Object.keys(b)) if (j in a) total += Math.abs(b[j] - a[j])
+  /**
+   * How far the dancer's and the tutorial's joints travelled, counting only joints
+   * the camera saw on both frames: a joint that's out of view (feet, often) must not
+   * count as "not moving".
+   */
+  travel() {
+    let user = 0, ref = 0
+    for (let i = 1; i < this.samples.length; i++) {
+      const a = this.samples[i - 1], b = this.samples[i]
+      for (const j of Object.keys(b.user)) {
+        if (!(j in a.user) || !(j in a.ref) || !(j in b.ref)) continue
+        user += Math.abs(b.user[j] - a.user[j])
+        ref += Math.abs(b.ref[j] - a.ref[j])
+      }
     }
-    return total
+    return { user, ref }
   }
+  /** 0–1: how much the dancer moves compared with the tutorial (1 = as much or more). */
   ratio() {
     if (this.samples.length < 3) return 1
-    const ref = MotionMeter.travel(this.samples, 'ref')
+    const { user, ref } = this.travel()
     if (ref < 60) return 1 // the tutorial is (nearly) holding still here: nothing to compare
-    return Math.min(1, MotionMeter.travel(this.samples, 'user') / ref)
+    // Full credit from FULL_MOTION of the tutorial's movement: webcam tracking is smoothed,
+    // so a dancer matching the moves measures a little less travel than the recording.
+    return Math.min(1, user / (ref * FULL_MOTION))
   }
   reset() {
     this.samples = []
@@ -160,7 +174,7 @@ export class LoopStats {
     this.samples = []
   }
   add(sample) {
-    // sample: { count, joints, overall, offset }
+    // sample: { count, joints, overall, offset, shape?, motion? }
     this.samples.push(sample)
   }
   summary() {
@@ -180,6 +194,10 @@ export class LoopStats {
     const countAvg = Object.entries(byCount).map(([c, v]) => [Number(c), v.reduce((a, b) => a + b, 0) / v.length])
     const worstCount = countAvg.sort((a, b) => a[1] - b[1])[0]?.[0]
     const weakestJoint = Object.keys(joints).sort((a, b) => joints[a] - joints[b])[0]
-    return { overall, joints, timingOffset, worstCount, weakestJoint, passed: overall >= PASS_SCORE }
+    // The score is pose match × movement: keep both so the dancer can see which one held it back.
+    const avg = (key) => this.samples.reduce((s, x) => s + (x[key] ?? x.overall), 0) / n
+    const shape = avg('shape')
+    const motion = this.samples.some((x) => x.motion !== undefined) ? avg('motion') : 1
+    return { overall, shape, motion, joints, timingOffset, worstCount, weakestJoint, passed: overall >= PASS_SCORE }
   }
 }
