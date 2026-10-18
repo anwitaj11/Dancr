@@ -80,6 +80,9 @@ class PgConnection:
     def commit(self):
         self._conn.commit()
 
+    def rollback(self):
+        self._conn.rollback()
+
     def close(self):
         self._conn.close()
 
@@ -99,6 +102,10 @@ def session():
     try:
         yield conn
         conn.commit()
+    except Exception:
+        if hasattr(conn, "rollback"):
+            conn.rollback()
+        raise
     finally:
         conn.close()
 
