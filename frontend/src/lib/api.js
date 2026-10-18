@@ -49,6 +49,14 @@ export const api = {
   // Saved multi-person scan: null when the dance doesn't have one (older uploads).
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
   getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
+  // The dancer's latest recorded try (one per user, replaced each time).
+  saveTake: (user, blob, meta) =>
+    send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
+      method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
+    }),
+  getTake: (user) => send(`${API_URL}/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)),
+  takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
+  deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
   voiceSession: () => json('/voice-agent/session'),

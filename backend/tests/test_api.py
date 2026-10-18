@@ -60,6 +60,19 @@ def test_full_flow():
         assert (replaced["name"], replaced["bpm"], replaced["data"]["fps"]) == ("Real Dab", 96, 24)
         assert client.put("/dances/999", json=new).status_code == 404
 
+        # the last take: one recording per user, replaced by the next one
+        assert client.get("/takes/sam").status_code == 404
+        q = {"dance_id": dance_id, "step": "Step 1", "score": 0.82, "passed": True, "speed": 0.7, "start": 1.5}
+        assert client.put("/takes/sam", params=q, content=b"x", headers={"content-type": "text/plain"}).status_code == 415
+        assert client.put("/takes/sam", params={**q, "dance_id": 999}, content=b"x", headers={"content-type": "video/webm"}).status_code == 404
+        assert client.put("/takes/sam", params=q, content=b"take1", headers={"content-type": "video/webm"}).status_code == 200
+        assert client.put("/takes/sam", params={**q, "score": 0.9}, content=b"take2", headers={"content-type": "video/mp4"}).status_code == 200
+        take = client.get("/takes/sam").json()
+        assert (take["danceName"], take["step"], take["score"], take["speed"]) == ("Real Dab", "Step 1", 0.9, 0.7)
+        assert client.get("/takes/sam/video").content == b"take2"
+        assert client.delete("/takes/sam").status_code == 200
+        assert client.get("/takes/sam").status_code == 404
+
         # a second dance, deleted along with its video and attempts
         doomed = client.post("/dances", json=DANCE).json()["id"]
         client.put(f"/dances/{doomed}/video", content=b"vid", headers={"content-type": "video/mp4"})

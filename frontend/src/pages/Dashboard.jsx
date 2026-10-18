@@ -3,6 +3,7 @@ import { api, currentUser } from '../lib/api.js'
 import { colorFor, pct } from '../lib/scoring.js'
 import { Headline, Sticker, Win } from '../components/Retro.jsx'
 import { useCoachSummary } from '../lib/coachContext.jsx'
+import LastTake from '../components/LastTake.jsx'
 
 const PART_ICONS = { arms: '💪', torso: '🧍', legs: '🦵' }
 
@@ -86,6 +87,8 @@ export default function Dashboard() {
         </aside>
 
         <div className="profile-main">
+          <LastTake user={user} />
+
           <Win title="SKILLS.exe" color="pink">
             {Object.keys(parts).length === 0 && <p className="muted">Finish a step to see your skills.</p>}
             {Object.entries(parts).map(([part, v]) => (

@@ -15,6 +15,7 @@ import { refreshAngles } from '../lib/dance.js'
 import VineRecorder from '../components/VineRecorder.jsx'
 import SpeedPicker, { formatSpeed, nearestSpeed } from '../components/SpeedPicker.jsx'
 import RailButton from '../components/RailButton.jsx'
+import { TakeRecorder } from '../lib/takeRecorder.js'
 import { isCalibrated } from './Calibrate.jsx'
 import { useCoachContext, useCoachSummary } from '../lib/coachContext.jsx'
 import { APP_NAME, Headline, Polaroid, Win } from '../components/Retro.jsx'
@@ -144,6 +145,10 @@ export default function Practice() {
   const [speed, setSpeed] = useState(1)
   const [mirror, setMirror] = useState(true)
   const [musicOn, setMusicOn] = useState(() => loadFlag('dablab.music'))
+  // Record each try so the latest one shows up on My Practice.
+  const [recordOn, setRecordOn] = useState(() => loadFlag('dancr.recordTakes'))
+  const takeRecorder = useRef(null)
+  takeRecorder.current ??= new TakeRecorder()
   const [cuesOn, setCuesOn] = useState(() => loadFlag('dablab.cues'))
   const [ducked, setDucked] = useState(false) // music quieter while a spoken line plays
   const [drillOn, setDrillOn] = useState(false)
@@ -227,6 +232,7 @@ export default function Practice() {
   function stop() {
     timers.current.forEach(clearTimeout)
     timers.current = []
+    takeRecorder.current.cancel() // stopped early: not a finished try
     setCountIn(null)
     setClockPhase('idle')
   }
@@ -274,6 +280,12 @@ export default function Practice() {
     tick()
   }
 
+  // Recording starts on the first danced beat, so it lines up with the tutorial clip.
+  useEffect(() => {
+    if (phase === 'dancing' && recordOn) takeRecorder.current.start(canvasRef.current)
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => takeRecorder.current.cancel(), [])
+
   /** Watch-first preview (unless turned off), then the count-in, then dance. */
   function start({ withPreview = previewFirst } = {}) {
     if (!chunk) return
@@ -311,7 +323,15 @@ export default function Practice() {
   async function finishLoop() {
     setClockPhase('results')
     const summary = stats.current.summary()
-    if (!summary) return
+    if (!summary) {
+      takeRecorder.current.cancel()
+      return
+    }
+    // Keep this try's recording as the latest take (replaces the previous one).
+    takeRecorder.current.stop().then((blob) => blob && api.saveTake(user, blob, {
+      dance_id: id, step: chunk.label, score: summary.overall, passed: summary.passed,
+      speed, start: chunk.start + (dance.videoOffset ?? 0), mirror,
+    })).catch(() => {})
     const key = `${chunkCounts}:${chunkIdx}`
     tries.current[key] = (tries.current[key] ?? 0) + 1
     setResult(summary)
@@ -597,6 +617,9 @@ export default function Practice() {
               {drill && <RailButton icon="🎯" label={`Drill ${drill.part}`} active={drillOn} onClick={() => setDrillOn((d) => !d)} />}
               <RailButton icon={<span className="speed-icon">{chunkCounts}</span>} label="Counts" disabled={busy}
                 onClick={() => { setChunkCounts((c) => (c === 4 ? 8 : c === 8 ? 16 : 4)); pickChunk(0); setPassed(new Set()) }} />
+              <RailButton icon="🎥" label={recordOn ? 'Save take' : 'Take off'} active={recordOn}
+                title="Keep a recording of your latest try on My Practice"
+                onClick={() => setRecordOn((on) => { saveFlag('dancr.recordTakes', !on); return !on })} />
               <VineRecorder canvasRef={canvasRef} name={dance.name.toLowerCase().replace(/\W+/g, '-')} />
             </div>
             <div className="segments">

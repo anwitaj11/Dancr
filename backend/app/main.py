@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -193,6 +195,69 @@ def get_people(dance_id: int):
     if not path.exists():
         raise HTTPException(404, "no saved scan for this dance")
     return FileResponse(path, media_type="application/json")
+
+
+# ---------- last take: the latest recording of the dancer practicing ----------
+
+TAKE_TYPES = {"video/webm": ".webm", "video/mp4": ".mp4"}
+
+
+def _take_base(user: str) -> Path:
+    """One recording per user, replaced by every new take."""
+    return MEDIA_DIR / "takes" / (re.sub(r"[^A-Za-z0-9_-]", "_", user)[:64] or "_")
+
+
+def _take_video(user: str) -> Path | None:
+    base = _take_base(user)
+    return next((p for p in (base.with_suffix(ext) for ext in TAKE_TYPES.values()) if p.exists()), None)
+
+
+@app.put("/takes/{user}")
+async def save_take(user: str, request: Request, dance_id: int, step: str = "", score: float = 0,
+                    passed: bool = False, speed: float = 1, start: float = 0, mirror: bool = False):
+    """Raw video bytes in the body; details of the try in the query string."""
+    ext = TAKE_TYPES.get(request.headers.get("content-type", "").split(";")[0])
+    if not ext:
+        raise HTTPException(415, f"take must be one of {', '.join(TAKE_TYPES)}")
+    with session() as conn:
+        row = conn.execute("SELECT name FROM dances WHERE id = ?", (dance_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "dance not found")
+    body = await request.body()
+    if len(body) > MAX_VIDEO_BYTES:
+        raise HTTPException(413, "take too large")
+    base = _take_base(user)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    if old := _take_video(user):
+        old.unlink()
+    base.with_suffix(ext).write_bytes(body)
+    meta = {"danceId": dance_id, "danceName": row["name"], "step": step, "score": score, "passed": passed,
+            "speed": speed, "start": start, "mirror": mirror, "recordedAt": time.time()}
+    base.with_suffix(".json").write_text(json.dumps(meta))
+    return meta
+
+
+@app.get("/takes/{user}")
+def get_take(user: str):
+    meta = _take_base(user).with_suffix(".json")
+    if not meta.exists() or not _take_video(user):
+        raise HTTPException(404, "no take yet")
+    return json.loads(meta.read_text())
+
+
+@app.get("/takes/{user}/video")
+def get_take_video(user: str):
+    if not (path := _take_video(user)):
+        raise HTTPException(404, "no take yet")
+    return FileResponse(path)
+
+
+@app.delete("/takes/{user}")
+def delete_take(user: str):
+    if path := _take_video(user):
+        path.unlink()
+    _take_base(user).with_suffix(".json").unlink(missing_ok=True)
+    return {"deleted": True}
 
 
 @app.get("/dances/{dance_id}/video")
