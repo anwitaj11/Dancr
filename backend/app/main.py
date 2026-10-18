@@ -78,7 +78,15 @@ def _signed_storage_url(path, expires=3600):
     if r.status_code >= 400:
         raise HTTPException(502, "Unable to retrieve private video")
     signed = r.json().get("signedURL", "")
-    return signed if signed.startswith("http") else config[0] + signed
+    if signed.startswith(("https://", "http://")):
+        return signed
+    # Supabase returns /object/sign/...; it is relative to /storage/v1,
+    # not to the project root. A root-relative redirect returns "requested path is invalid".
+    if signed.startswith("/storage/v1/"):
+        return config[0] + signed
+    if signed.startswith("/object/"):
+        return config[0] + "/storage/v1" + signed
+    raise HTTPException(502, "Storage returned an unexpected signed video URL")
 
 
 @app.post("/dances/{dance_id}/video-upload")
