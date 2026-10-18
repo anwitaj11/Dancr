@@ -299,8 +299,7 @@ async def upload_video(dance_id: int, request: Request):
     if not ext:
         raise HTTPException(415, f"video must be one of {', '.join(VIDEO_TYPES)}")
     with session() as conn:
-        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
-            raise HTTPException(404, "dance not found")
+        _assert_owned(conn, dance_id, _owner(request))
     body = await request.body()
     if len(body) > MAX_VIDEO_BYTES:
         raise HTTPException(413, "video too large")
@@ -315,8 +314,7 @@ async def upload_video(dance_id: int, request: Request):
 async def save_people(dance_id: int, request: Request):
     """The video's multi-person scan (JSON from the browser), kept next to the video."""
     with session() as conn:
-        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
-            raise HTTPException(404, "dance not found")
+        _assert_owned(conn, dance_id, _owner(request))
     body = await request.body()
     if len(body) > MAX_VIDEO_BYTES:
         raise HTTPException(413, "scan too large")
@@ -330,7 +328,9 @@ async def save_people(dance_id: int, request: Request):
 
 
 @app.get("/dances/{dance_id}/people")
-def get_people(dance_id: int):
+def get_people(dance_id: int, request: Request):
+    with session() as conn:
+        _assert_readable(conn, dance_id, _owner(request))
     path = _people_path(dance_id)
     if not path.exists():
         raise HTTPException(404, "no saved scan for this dance")
@@ -356,6 +356,8 @@ def _take_video(user: str) -> Path | None:
 async def save_take(user: str, request: Request, dance_id: int, step: str = "", score: float = 0,
                     passed: bool = False, speed: float = 1, start: float = 0, mirror: bool = False):
     """Raw video bytes in the body; details of the try in the query string."""
+    if user != _owner(request):
+        raise HTTPException(403, "Cannot access another account")
     ext = TAKE_TYPES.get(request.headers.get("content-type", "").split(";")[0])
     if not ext:
         raise HTTPException(415, f"take must be one of {', '.join(TAKE_TYPES)}")
@@ -378,7 +380,9 @@ async def save_take(user: str, request: Request, dance_id: int, step: str = "", 
 
 
 @app.get("/takes/{user}")
-def get_take(user: str):
+def get_take(user: str, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, "Cannot access another account")
     meta = _take_base(user).with_suffix(".json")
     if not meta.exists() or not _take_video(user):
         raise HTTPException(404, "no take yet")
@@ -386,14 +390,18 @@ def get_take(user: str):
 
 
 @app.get("/takes/{user}/video")
-def get_take_video(user: str):
+def get_take_video(user: str, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, "Cannot access another account")
     if not (path := _take_video(user)):
         raise HTTPException(404, "no take yet")
     return FileResponse(path)
 
 
 @app.delete("/takes/{user}")
-def delete_take(user: str):
+def delete_take(user: str, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, "Cannot access another account")
     if path := _take_video(user):
         path.unlink()
     _take_base(user).with_suffix(".json").unlink(missing_ok=True)
@@ -401,7 +409,9 @@ def delete_take(user: str):
 
 
 @app.get("/dances/{dance_id}/video")
-def get_video(dance_id: int):
+def get_video(dance_id: int, request: Request):
+    with session() as conn:
+        _assert_readable(conn, dance_id, _owner(request))
     stored = _stored_video_name(dance_id)
     if stored:
         return RedirectResponse(_signed_storage_url(stored))
