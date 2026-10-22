@@ -408,6 +408,17 @@ def delete_take(user: str, request: Request):
     return {"deleted": True}
 
 
+@app.get("/dances/{dance_id}/video-url")
+def get_video_url(dance_id: int, request: Request):
+    """Return a short-lived signed playback URL after checking ownership."""
+    with session() as conn:
+        _assert_readable(conn, dance_id, _owner(request))
+    stored = _stored_video_name(dance_id)
+    if not stored:
+        raise HTTPException(404, "No cloud video for this dance")
+    return {"url": _signed_storage_url(stored)}
+
+
 @app.get("/dances/{dance_id}/video")
 def get_video(dance_id: int, request: Request):
     with session() as conn:
