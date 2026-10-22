@@ -57,10 +57,14 @@ export const api = {
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
   getPeople: (id) => request(`/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   // The dancer's latest recorded try (one per user, replaced each time).
-  saveTake: (user, blob, meta) =>
-    send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
-      method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
-    }),
+  saveTake: async (user, blob, meta) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
+      method: 'PUT', headers: { 'Content-Type': blob.type, ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: blob,
+    })
+    if (!res.ok) throw new Error(`Saving practice recording failed: ${res.status}`)
+    return res
+  },
   getTake: (user) => request(`/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
   deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
