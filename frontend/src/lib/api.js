@@ -64,6 +64,7 @@ export const api = {
   getTake: (user) => request(`/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
   deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
+  signedVideoUrl: (id) => json(`/dances/${id}/video-url`).then((result) => result.url),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
   voiceSession: () => json('/voice-agent/session'),
