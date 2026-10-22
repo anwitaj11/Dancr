@@ -1,3 +1,4 @@
+import { usePrivateVideoUrl } from '../lib/usePrivateVideoUrl.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
@@ -211,6 +212,7 @@ export default function Practice() {
     return () => { active = false; timers.current.forEach(clearTimeout) }
   }, [id, user, loadAttempt])
 
+  const privateVideoSrc = usePrivateVideoUrl(id, hasVideo)
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
   // Video with several people: mark the one this lesson follows.
   const dancerMarker = useMemo(() => (dance?.dancer && markerMode !== 'off' ? {
@@ -557,7 +559,7 @@ export default function Practice() {
             <div className="duet">
               <div className="duet-half tutorial">
                 {hasVideo ? (
-                  <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
+                  <ReferenceVideo src={privateVideoSrc} getTime={refTime} offset={dance.videoOffset ?? 0}
                     speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror}
                     muted={!musicOn} volume={ducked ? 0.25 : 0.9} className="fill" dancer={dancerMarker} />
                 ) : (
@@ -666,7 +668,7 @@ export default function Practice() {
               <button key={i} className="polaroid-btn" disabled={busy} onClick={() => pickChunk(i)}>
                 <Polaroid caption={c.label.toLowerCase()} badge={i + 1} tilt={i % 2 ? 1.5 : -1.5} active={i === chunkIdx}>
                   {hasVideo ? (
-                    <video src={`${api.videoUrl(id)}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
+                    <video src={`${privateVideoSrc}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
                   ) : (
                     <SkeletonPlayer dance={dance} start={c.start} end={c.end} width={160} height={160} color="#ff3ea5" glow={6} lineWidth={5} className="fill" />
                   )}
