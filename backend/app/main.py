@@ -337,45 +337,69 @@ def get_people(dance_id: int, request: Request):
     return FileResponse(path, media_type="application/json")
 
 
-# ---------- last take: the latest recording of the dancer practicing ----------
+# ---------- persistent private practice recordings ----------
 
 TAKE_TYPES = {"video/webm": ".webm", "video/mp4": ".mp4"}
 
 
-def _take_base(user: str) -> Path:
-    """One recording per user, replaced by every new take."""
-    return MEDIA_DIR / "takes" / (re.sub(r"[^A-Za-z0-9_-]", "_", user)[:64] or "_")
+def _take_row(user: str):
+    with session() as conn:
+        return conn.execute("SELECT path, metadata FROM practice_takes WHERE owner_id = ?", (user,)).fetchone()
 
 
-def _take_video(user: str) -> Path | None:
-    base = _take_base(user)
-    return next((p for p in (base.with_suffix(ext) for ext in TAKE_TYPES.values()) if p.exists()), None)
-
-
-@app.put("/takes/{user}")
-async def save_take(user: str, request: Request, dance_id: int, step: str = "", score: float = 0,
-                    passed: bool = False, speed: float = 1, start: float = 0, mirror: bool = False):
-    """Raw video bytes in the body; details of the try in the query string."""
+@app.post("/takes/{user}/upload-url")
+def take_upload_url(user: str, request: Request, content_type: str = "video/webm"):
     if user != _owner(request):
         raise HTTPException(403, "Cannot access another account")
-    ext = TAKE_TYPES.get(request.headers.get("content-type", "").split(";")[0])
+    ext = TAKE_TYPES.get(content_type)
     if not ext:
-        raise HTTPException(415, f"take must be one of {', '.join(TAKE_TYPES)}")
+        raise HTTPException(415, "Unsupported practice recording format")
+    config = _storage_config()
+    if not config:
+        raise HTTPException(503, "Supabase storage not configured")
+    path = f"takes/{user}/{int(time.time() * 1000)}{ext}"
+    with httpx.Client(timeout=15) as client:
+        response = client.post(f"{config[0]}/storage/v1/object/upload/sign/dance-videos/{path}", headers=_storage_headers())
+    if response.status_code >= 400 or not response.json().get("token"):
+        raise HTTPException(502, "Unable to authorize practice upload")
+    return {"url": f"{config[0]}/storage/v1/object/upload/sign/dance-videos/{path}?token={response.json()['token']}", "path": path}
+
+
+class TakeComplete(BaseModel):
+    path: str
+    dance_id: int
+    step: str = ""
+    score: float = Field(default=0, ge=0, le=1)
+    passed: bool = False
+    speed: float = 1
+    start: float = 0
+    mirror: bool = False
+
+
+@app.post("/takes/{user}/complete")
+def complete_take(user: str, body: TakeComplete, request: Request):
+    if user != _owner(request):
+        raise HTTPException(403, "Cannot access another account")
+    if not re.fullmatch(rf"takes/{re.escape(user)}/[0-9]+\\.(webm|mp4)", body.path):
+        raise HTTPException(400, "Invalid practice recording path")
     with session() as conn:
-        row = conn.execute("SELECT name FROM dances WHERE id = ?", (dance_id,)).fetchone()
-    if not row:
-        raise HTTPException(404, "dance not found")
-    body = await request.body()
-    if len(body) > MAX_VIDEO_BYTES:
-        raise HTTPException(413, "take too large")
-    base = _take_base(user)
-    base.parent.mkdir(parents=True, exist_ok=True)
-    if old := _take_video(user):
-        old.unlink()
-    base.with_suffix(ext).write_bytes(body)
-    meta = {"danceId": dance_id, "danceName": row["name"], "step": step, "score": score, "passed": passed,
-            "speed": speed, "start": start, "mirror": mirror, "recordedAt": time.time()}
-    base.with_suffix(".json").write_text(json.dumps(meta))
+        _assert_readable(conn, body.dance_id, user)
+        dance = conn.execute("SELECT name FROM dances WHERE id = ?", (body.dance_id,)).fetchone()
+        old = conn.execute("SELECT path FROM practice_takes WHERE owner_id = ?", (user,)).fetchone()
+        meta = {"danceId": body.dance_id, "danceName": dance["name"], "step": body.step,
+                "score": body.score, "passed": body.passed, "speed": body.speed,
+                "start": body.start, "mirror": body.mirror, "recordedAt": time.time()}
+        conn.execute("""INSERT INTO practice_takes (owner_id, path, metadata) VALUES (?, ?, ?)
+                     ON CONFLICT (owner_id) DO UPDATE SET path = EXCLUDED.path, metadata = EXCLUDED.metadata""",
+                     (user, body.path, json.dumps(meta)))
+    # Best effort cleanup; a failed cleanup must not lose the newly saved take.
+    if old and old["path"] != body.path:
+        try:
+            with httpx.Client(timeout=15) as client:
+                client.request("DELETE", f"{_storage_config()[0]}/storage/v1/object/dance-videos",
+                               headers=_storage_headers(), json={"prefixes": [old["path"]]})
+        except httpx.HTTPError:
+            pass
     return meta
 
 
@@ -383,29 +407,36 @@ async def save_take(user: str, request: Request, dance_id: int, step: str = "", 
 def get_take(user: str, request: Request):
     if user != _owner(request):
         raise HTTPException(403, "Cannot access another account")
-    meta = _take_base(user).with_suffix(".json")
-    if not meta.exists() or not _take_video(user):
-        raise HTTPException(404, "no take yet")
-    return json.loads(meta.read_text())
+    row = _take_row(user)
+    return json.loads(row["metadata"]) if row else None
 
 
-@app.get("/takes/{user}/video")
-def get_take_video(user: str, request: Request):
+@app.get("/takes/{user}/video-url")
+def get_take_video_url(user: str, request: Request):
     if user != _owner(request):
         raise HTTPException(403, "Cannot access another account")
-    if not (path := _take_video(user)):
-        raise HTTPException(404, "no take yet")
-    return FileResponse(path)
+    row = _take_row(user)
+    if not row:
+        raise HTTPException(404, "No recording yet")
+    return {"url": _signed_storage_url(row["path"])}
 
 
 @app.delete("/takes/{user}")
 def delete_take(user: str, request: Request):
     if user != _owner(request):
         raise HTTPException(403, "Cannot access another account")
-    if path := _take_video(user):
-        path.unlink()
-    _take_base(user).with_suffix(".json").unlink(missing_ok=True)
-    return {"deleted": True}
+    with session() as conn:
+        row = conn.execute("SELECT path FROM practice_takes WHERE owner_id = ?", (user,)).fetchone()
+        if row:
+            conn.execute("DELETE FROM practice_takes WHERE owner_id = ?", (user,))
+    if row:
+        try:
+            with httpx.Client(timeout=15) as client:
+                client.request("DELETE", f"{_storage_config()[0]}/storage/v1/object/dance-videos",
+                               headers=_storage_headers(), json={"prefixes": [row["path"]]})
+        except httpx.HTTPError:
+            pass
+    return {"deleted": bool(row)}
 
 
 @app.get("/dances/{dance_id}/video-url")
