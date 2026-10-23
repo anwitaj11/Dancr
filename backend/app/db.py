@@ -1,6 +1,8 @@
 import json
 import os
 import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 from contextlib import contextmanager
 
 DB_PATH = os.getenv("DABLAB_DB", os.path.join(os.path.dirname(__file__), "..", "dablab.db"))
@@ -46,7 +48,41 @@ CREATE TABLE IF NOT EXISTS profiles (
 """
 
 
-def connect() -> sqlite3.Connection:
+class PostgresConnection:
+    """Small compatibility layer for the original SQLite-style queries."""
+    def __init__(self, conn):
+        self.conn = conn
+
+    def execute(self, query, params=()):
+        query = query.replace("?", "%s")
+        is_insert = query.lstrip().upper().startswith("INSERT INTO")
+        if is_insert and "RETURNING" not in query.upper():
+            query += " RETURNING id" if "INSERT INTO profiles" not in query else " RETURNING user_id"
+        cursor = self.conn.execute(query, params)
+        if is_insert:
+            row = cursor.fetchone()
+            return InsertResult(row["id"] if "id" in row else row["user_id"])
+        return cursor
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
+
+class InsertResult:
+    def __init__(self, id):
+        self.lastrowid = id
+        self.rowcount = 1
+
+
+def connect():
+    if url := os.getenv("DATABASE_URL"):
+        return PostgresConnection(psycopg.connect(url, row_factory=dict_row))
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -59,11 +95,17 @@ def session():
     try:
         yield conn
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
 
 def init_db() -> None:
+    # The Supabase project already has the PostgreSQL schema. Do not run SQLite DDL there.
+    if os.getenv("DATABASE_URL"):
+        return
     with session() as conn:
         conn.executescript(SCHEMA)
 
