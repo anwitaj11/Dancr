@@ -1,7 +1,5 @@
 """Account isolation regression tests; no real Supabase credentials required."""
-from unittest.mock import patch
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 from app import main
 
 
@@ -15,13 +13,11 @@ class FakeRows:
 
 
 def test_private_dance_cannot_be_read_by_another_user():
-    with patch.object(main, 'session') as session:
-        session.return_value.__enter__.return_value = FakeRows('account-a')
-        try:
-            main._assert_readable(FakeRows('account-a'), 10, 'account-b')
-            assert False, 'another account must not read a private dance'
-        except HTTPException as error:
-            assert error.status_code == 404
+    try:
+        main._assert_readable(FakeRows('account-a'), 10, 'account-b')
+        assert False, 'another account must not read a private dance'
+    except HTTPException as error:
+        assert error.status_code == 404
 
 
 def test_private_dance_cannot_be_modified_by_another_user():
