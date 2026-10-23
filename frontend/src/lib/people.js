@@ -56,18 +56,7 @@ export function crowdSize(raw, minFrames = Math.min(8, Math.ceil(raw.length * 0.
     // Prefer frames with exactly n people, so the picture's badges match the buttons.
     const exact = frames.filter(([f]) => f.poses.length === n)
     if (exact.length) frames.splice(0, frames.length, ...exact)
-    // Pick a frame where people are clearly separated, not merely a frame with
-    // high landmark confidence. Overlapping dancers make the selection ambiguous.
-    const clarity = ([f]) => {
-      const centers = f.poses.map(poseCenter)
-      const separation = centers.length < 2 ? 1 : Math.min(
-        ...centers.flatMap((center, i) => centers.slice(i + 1).map(
-          (other) => Math.hypot(center[0] - other[0], center[1] - other[1])
-        ))
-      )
-      const visibility = f.poses.reduce((s, pose) => s + pose.reduce((v, p) => v + (p[2] ?? 1), 0), 0)
-      return Math.min(separation, 0.5) * 100 + visibility / (f.poses.length || 1)
-    }
+    const clarity = ([f]) => f.poses.reduce((s, pose) => s + pose.reduce((v, p) => v + (p[2] ?? 1), 0), 0)
     const [, anchor] = frames.reduce((best, x) => (clarity(x) > clarity(best) ? x : best))
     return { people: n, anchor }
   }
@@ -82,9 +71,8 @@ export function sortLeftToRight(poses) {
 const MAX_JUMP = 0.15 // max hip movement between consecutive frames (fraction of the frame)
 const MAX_GAP_JUMP = 0.4 // cap when the dancer has been hidden for a while
 const SIZE_WEIGHT = 0.5 // how much a change in body size counts against a match
-const LOOK_WEIGHT = 2 // identity is more important than proximity
-const LOOK_MAX = 0.28 // allow moderate lighting changes, not a different outfit
-const IDENTITY_MARGIN = 0.055 // ambiguous matches are skipped rather than switching people
+const LOOK_WEIGHT = 1 // how much different clothing colours count against a match
+const LOOK_MAX = 0.3 // colours this different = someone else, even if they're standing in the right spot
 
 /**
  * How different two people look (clothing colours from processVideo's lookOf), 0–1.
@@ -131,31 +119,13 @@ export function trackDancer(raw, anchor, person) {
         const dist = Math.hypot(x - predicted[0], y - predicted[1])
         if (dist > limit) return
         const candidate = raw[i].looks?.[k] ?? null
-        const recentDiff = lookDiff(candidate, look)
-        const anchorDiff = lookDiff(candidate, startLook)
-        // A recent wrong match must not redefine who the original dancer is.
-        if (anchorDiff !== null && anchorDiff > LOOK_MAX) return
-        if (recentDiff !== null && recentDiff > LOOK_MAX) return
-        const colour = anchorDiff === null ? (recentDiff ?? 0) : (recentDiff === null ? anchorDiff : 0.7 * anchorDiff + 0.3 * recentDiff)
+        const diffs = [lookDiff(candidate, look), lookDiff(candidate, startLook)].filter((d) => d !== null)
+        const colour = diffs.length ? Math.min(...diffs) : 0
+        if (colour > LOOK_MAX) return // different outfit: not our dancer
         const cost = dist + SIZE_WEIGHT * Math.abs(poseSize(pose) - lastSize) + LOOK_WEIGHT * colour
         if (cost < bestCost) { best = pose; bestLook = candidate; bestCost = cost }
       })
       if (!best) continue // hidden or out of frame this time
-      // If a nearby second dancer looks almost as plausible, avoid a forced identity switch.
-      const plausible = raw[i].poses.filter((pose, k) => {
-        if (pose === best) return false
-        const d = Math.hypot(poseCenter(pose)[0] - predicted[0], poseCenter(pose)[1] - predicted[1])
-        if (d > limit) return false
-        const candidateLook = raw[i].looks?.[k] ?? null
-        const anchorDiff = lookDiff(candidateLook, startLook)
-        const recentDiff = lookDiff(candidateLook, look)
-        if (anchorDiff !== null && anchorDiff > LOOK_MAX) return false
-        if (recentDiff !== null && recentDiff > LOOK_MAX) return false
-        const colour = anchorDiff === null ? (recentDiff ?? 0) : (recentDiff === null ? anchorDiff : 0.7 * anchorDiff + 0.3 * recentDiff)
-        const cost = d + SIZE_WEIGHT * Math.abs(poseSize(pose) - lastSize) + LOOK_WEIGHT * colour
-        return cost - bestCost < IDENTITY_MARGIN
-      })
-      if (plausible.length) continue
       const center = poseCenter(best)
       const step = [(center[0] - last[0]) / gap, (center[1] - last[1]) / gap]
       vel = [vel[0] * 0.5 + step[0] * 0.5, vel[1] * 0.5 + step[1] * 0.5]
