@@ -46,7 +46,7 @@ function Shell({ session, onSignIn }) {
       <main key={user} className={immersive ? 'immersive' : ''}>
         <Routes>
           <Route path="/" element={<Library />} />
-          <Route path="/upload" element={<Upload />} />
+          <Route path="/upload" element={session ? <Upload /> : <section className="upload-page grid-bg cool" style={{ minHeight: "70vh", display: "grid", placeItems: "center", textAlign: "center", padding: 32 }}><div><h1>MAKE IT YOURS ✦</h1><p>Sign in to upload your own dances and save your progress.</p><button className="btn-pink" type="button" onClick={onSignIn}>Sign in / Create account →</button><p><Link to="/">← Explore public dances</Link></p></div></section>} />
           <Route path="/calibrate" element={<Calibrate />} />
           <Route path="/practice/:id" element={<Practice />} />
           <Route path="/remix/:id" element={<Remix />} />
