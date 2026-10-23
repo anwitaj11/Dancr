@@ -33,6 +33,8 @@ const json = (path, opts) => request(path, opts).then((r) => r.json())
 
 export const api = {
   listDances: () => json('/dances'),
+  adminStatus: () => json('/admin/me'),
+  adminDeletePublicDance: (id) => json(`/admin/public-dances/${id}`, { method: 'DELETE' }),
   getDance: (id) => json(`/dances/${id}`),
   replaceDance: (id, dance) =>
     json(`/dances/${id}`, { method: 'PUT', body: { name: dance.name, bpm: dance.bpm, data: dance } }),
