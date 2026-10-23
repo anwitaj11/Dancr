@@ -241,7 +241,7 @@ def create_dance(dance: DanceIn, request: Request):
 def list_dances(request: Request):
     """Library listing: metadata plus step count, without the heavy frame data."""
     with session() as conn:
-        rows = conn.execute("SELECT * FROM dances WHERE owner_id IS NULL OR owner_id = ? ORDER BY builtin DESC, difficulty, id", (_owner(request),)).fetchall()
+        rows = (conn.execute("SELECT * FROM dances WHERE owner_id IS NULL ORDER BY builtin DESC, difficulty, id").fetchall() if _owner(request) == "guest" else conn.execute("SELECT * FROM dances WHERE owner_id IS NULL OR owner_id = ? ORDER BY builtin DESC, difficulty, id", (_owner(request),)).fetchall())
     out = []
     for r in rows:
         data = loads(r["data"], {})
