@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { poseAt } from '../lib/people.js'
 import { containRect, drawDancerMarker } from '../lib/skeleton.js'
 
-const DRIFT = 0.15 // seconds before we hard-seek back into sync
+const DRIFT = 0.6 // allow natural playback; frequent hard seeks cause visible stutter
 
 /**
  * The original reference video, kept in sync with the practice clock.
@@ -25,10 +25,10 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
       video.playbackRate = speed
       if (playing) {
         if (video.paused) video.play().catch(() => {})
-        if (Math.abs(video.currentTime - target) > DRIFT) video.currentTime = target
+        if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) > DRIFT) video.currentTime = target
       } else {
         if (!video.paused) video.pause()
-        if (Math.abs(video.currentTime - target) > 0.04) video.currentTime = target
+        if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) > 0.12) video.currentTime = target
       }
       if (dancer && marker.current) drawMarker(marker.current, video, dancer, getTime(), mirror)
       raf = requestAnimationFrame(sync)
