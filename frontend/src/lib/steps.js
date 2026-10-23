@@ -32,7 +32,7 @@ export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
     if (!i || !frame.pose || !frames[i - 1].pose) return 0
     const dt = Math.max(0.025, frame.t - frames[i - 1].t)
     const a = frame.pose, b = frames[i - 1].pose
-    const joints = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+    const joints = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     let total = 0, n = 0
     for (const j of joints) {
       if (!a[j] || !b[j]) continue
