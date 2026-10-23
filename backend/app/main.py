@@ -88,6 +88,31 @@ def _owner(request: Request):
     return request.state.account_id
 
 
+def _require_admin(request: Request):
+    allowed = {s.strip() for s in os.getenv("DANCR_ADMIN_USER_IDS", "").split(",") if s.strip()}
+    if _owner(request) not in allowed:
+        raise HTTPException(403, "Admin access required")
+
+
+@app.get("/admin/me")
+def admin_status(request: Request):
+    return {"admin": _owner(request) in {s.strip() for s in os.getenv("DANCR_ADMIN_USER_IDS", "").split(",") if s.strip()}}
+
+
+@app.delete("/admin/public-dances/{dance_id}")
+def admin_delete_public_dance(dance_id: int, request: Request):
+    _require_admin(request)
+    with session() as conn:
+        row = conn.execute("SELECT owner_id FROM dances WHERE id = ?", (dance_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Dance not found")
+        if row["owner_id"] is not None:
+            raise HTTPException(403, "Only public tutorials can be deleted here")
+        conn.execute("DELETE FROM attempts WHERE dance_id = ?", (dance_id,))
+        conn.execute("DELETE FROM dances WHERE id = ?", (dance_id,))
+    return {"deleted": dance_id}
+
+
 def _assert_readable(conn, dance_id: int, account_id: str):
     row = conn.execute("SELECT owner_id FROM dances WHERE id = ?", (dance_id,)).fetchone()
     if not row or (row["owner_id"] is not None and str(row["owner_id"]) != account_id):
