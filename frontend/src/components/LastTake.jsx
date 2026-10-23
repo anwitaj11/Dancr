@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api.js'
+import { usePrivateVideoUrl } from '../lib/usePrivateVideoUrl.js'
 import { pct } from '../lib/scoring.js'
 import { Win } from './Retro.jsx'
 
@@ -21,12 +22,15 @@ function ago(seconds) {
 export default function LastTake({ user }) {
   const [take, setTake] = useState(undefined) // undefined = loading, null = none
   const [hasRef, setHasRef] = useState(false)
+  const [takeUrl, setTakeUrl] = useState(null)
+  const referenceUrl = usePrivateVideoUrl(take?.danceId, hasRef)
   const mine = useRef(null)
   const ref = useRef(null)
 
   useEffect(() => {
     api.getTake(user).then((t) => {
       setTake(t)
+      if (t) api.takeVideoUrl(user).then(setTakeUrl).catch(() => setTakeUrl(null))
       if (t) api.getDance(t.danceId).then((d) => setHasRef(d.hasVideo)).catch(() => setHasRef(false))
     }).catch(() => setTake(null))
   }, [user])
@@ -71,12 +75,12 @@ export default function LastTake({ user }) {
           </p>
           <div className={`take-duet ${hasRef ? '' : 'solo'}`}>
             <figure>
-              <video ref={mine} src={api.takeVideoUrl(user, take.recordedAt)} autoPlay loop muted playsInline controls />
+              <video ref={mine} src={takeUrl || undefined} autoPlay loop muted playsInline controls />
               <figcaption>YOU</figcaption>
             </figure>
             {hasRef && (
               <figure>
-                <video ref={ref} src={api.videoUrl(take.danceId)} muted playsInline preload="auto"
+                <video ref={ref} src={referenceUrl || undefined} muted playsInline preload="auto"
                   style={take.mirror ? { transform: 'scaleX(-1)' } : undefined} />
                 <figcaption>TUTORIAL</figcaption>
               </figure>
@@ -84,7 +88,7 @@ export default function LastTake({ user }) {
           </div>
           <div className="row">
             <Link to={`/practice/${take.danceId}`} className="btn-teal">practice it again →</Link>
-            <a className="btn-bracket" href={api.takeVideoUrl(user, take.recordedAt)} download={`dancr-${take.danceName}-take`}>[ SAVE ]</a>
+            <a className="btn-bracket" href={takeUrl || undefined} download={`dancr-${take.danceName}-take`}>[ SAVE ]</a>
             <button type="button" className="link-btn" onClick={remove}>🗑 delete</button>
           </div>
         </>
