@@ -26,21 +26,23 @@ export async function processVideoFile(file, { fps = SAMPLES_PER_SECOND, onProgr
   // On the page (but invisible) so the browser keeps decoding it at full speed.
   video.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none'
   document.body.appendChild(video)
-  await once(video, 'loadeddata')
-
-  // A fresh landmarker per upload keeps VIDEO-mode timestamps increasing.
-  closeLandmarker('upload')
-  const landmarker = await getLandmarker('upload', { numPoses: MAX_PEOPLE })
-  const raw = []
-  let lastTs = 0
-  const looks = lookSampler(video)
-  const detect = (t) => {
+  // Metadata and model initialization can fail; keep them inside cleanup scope.
+  try {
+    await Promise.race([
+      once(video, 'loadeddata'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Video could not be decoded. Try an MP4 or a shorter clip.')), 15000)),
+    ])
+    closeLandmarker('upload')
+    const landmarker = await getLandmarker('upload', { numPoses: MAX_PEOPLE })
+    const raw = []
+    let lastTs = 0
+    const looks = lookSampler(video)
+    const detect = (t) => {
     lastTs = Math.max(lastTs + 1, Math.round(t * 1000) + 1)
     const result = landmarker.detectForVideo(video, lastTs)
     const poses = dedupePoses((result.landmarks ?? []).map(toPose))
     raw.push({ t: Math.round(t * 1000) / 1000, poses, ...(poses.length && { looks: looks(poses) }) })
-  }
-  try {
+    }
     try {
       if (!('requestVideoFrameCallback' in video)) throw new Error('not supported')
       await scanWhilePlaying(video, detect, fps, onProgress)
