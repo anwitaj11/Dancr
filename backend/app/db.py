@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS attempts (
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS profiles (
+CREATE TABLE IF NOT EXISTS practice_takes (\n    owner_id TEXT PRIMARY KEY,\n    path TEXT NOT NULL,\n    metadata TEXT NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS profiles (
     user_id     INTEGER PRIMARY KEY REFERENCES users(id),
     skills      TEXT NOT NULL DEFAULT '{}',  -- EMA skill per joint and body part
     last_report TEXT,
@@ -74,7 +74,7 @@ class PgConnection:
         query = sql.replace("?", "%s")
         inserting = query.lstrip().upper().startswith("INSERT INTO")
         if inserting and "RETURNING" not in query.upper():
-            query += " RETURNING user_id AS id" if "INSERT INTO profiles" in query else " RETURNING id"
+            query += " RETURNING owner_id AS id" if "INSERT INTO practice_takes" in query else (" RETURNING user_id AS id" if "INSERT INTO profiles" in query else " RETURNING id")
         cursor = self._conn.execute(query, params)
         return PgCursor(cursor) if inserting else cursor
 
