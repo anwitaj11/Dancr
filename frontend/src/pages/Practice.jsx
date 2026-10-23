@@ -628,6 +628,9 @@ export default function Practice() {
               <RailButton icon="🎥" label={recordOn ? 'Save take' : 'Take off'} active={recordOn}
                 title="Keep a recording of your latest try on My Practice"
                 onClick={() => setRecordOn((on) => { saveFlag('dancr.recordTakes', !on); return !on })} />
+              <button className="btn-bracket" disabled={busy} onClick={() => { setSheetOpen(false); setCelebrate('dance') }}>
+                FINISH PRACTICE →
+              </button>
               <VineRecorder canvasRef={canvasRef} name={dance.name.toLowerCase().replace(/\W+/g, '-')} />
             </div>
             <div className="segments">
@@ -733,13 +736,14 @@ export default function Practice() {
               )}
               <div className="row center">
                 <button className="btn-teal" onClick={() => start()}>↺ try again</button>
+                <Link className="btn-bracket" to="/profile">VIEW PRACTICE SUMMARY →</Link>
                 {chunkIdx < chunks.length - 1 && (
                   <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>
                     {result.passed ? 'YES, MOVE ON →' : 'MOVE ON ANYWAY →'}
                   </button>
                 )}
                 {chunkIdx === chunks.length - 1 && !result.passed && (
-                  <button className="btn-bracket" onClick={() => setSheetOpen(false)}>[ CLOSE ]</button>
+                  <button className="btn-pink" onClick={() => { setSheetOpen(false); setCelebrate('dance') }}>FINISH PRACTICE →</button>
                 )}
               </div>
             </div>
@@ -751,7 +755,7 @@ export default function Practice() {
         <div className="celebrate dots" onClick={() => setCelebrate(null)}>
           <div className="burst" aria-hidden="true">{'🔥💯👌✨🔥💯👌✨'.match(/\p{Extended_Pictographic}/gu).map((e, i) => <span key={i} style={{ '--i': i }}>{e}</span>)}</div>
           <Headline lines={[['DANCE'], ['COMPLETE!', 'yellow']]} size="lg" as="h2" />
-          <p className="script big">you learned the whole thing. iconic.</p>
+          <p className="script big">practice session finished. nice work!</p>
           <div className="row center" onClick={(e) => e.stopPropagation()}>
             <button className="btn-teal" onClick={() => { setCelebrate(null); start() }}>↺ dance it again</button>
             <Link className="btn-pink" to="/profile">SEE MY PROGRESS →</Link>

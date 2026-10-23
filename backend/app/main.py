@@ -2,6 +2,8 @@ import json
 import os
 import re
 import time
+import uuid
+import httpx
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,7 +13,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, RedirectResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from . import coach, learner, remix, tts, voice_agent  # noqa: E402
@@ -41,6 +43,87 @@ def _people_path(dance_id: int) -> Path:
     """Everyone the pose model saw in the video, saved so the dancer can be changed without a rescan."""
     return MEDIA_DIR / f"{dance_id}.people.json"
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+
+# Persistent private reference videos. The browser uploads directly to Supabase
+# using a short-lived signed upload token; Vercel never receives the large file.
+def _storage_config():
+    url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    key = os.getenv("SUPABASE_SECRET_KEY", "")
+    if not url or not key:
+        raise HTTPException(503, "Supabase storage is not configured")
+    return url, {"apikey": key, "Authorization": f"Bearer {key}"}
+
+
+def _video_storage_path(dance_id):
+    with session() as conn:
+        row = conn.execute("SELECT data FROM dances WHERE id = ?", (dance_id,)).fetchone()
+    return loads(row["data"], {}).get("_videoPath") if row else None
+
+
+@app.post("/dances/{dance_id}/video-upload")
+def sign_video_upload(dance_id: int, content_type: str = "video/mp4"):
+    ext = VIDEO_TYPES.get(content_type)
+    if not ext:
+        raise HTTPException(415, "unsupported video type")
+    with session() as conn:
+        if not conn.execute("SELECT 1 FROM dances WHERE id = ?", (dance_id,)).fetchone():
+            raise HTTPException(404, "dance not found")
+    url, headers = _storage_config()
+    path = f"dances/{dance_id}/{uuid.uuid4().hex}{ext}"
+    try:
+        r = httpx.post(f"{url}/storage/v1/object/upload/sign/dance-videos/{path}",
+                       headers=headers, timeout=15)
+        r.raise_for_status()
+        token = r.json()["token"]
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        raise HTTPException(502, "Could not create a signed video upload") from exc
+    return {"url": f"{url}/storage/v1/object/upload/sign/dance-videos/{path}?token={token}", "path": path}
+
+
+class UploadedVideo(BaseModel):
+    path: str
+
+
+@app.post("/dances/{dance_id}/video-complete")
+def complete_video_upload(dance_id: int, body: UploadedVideo):
+    if not re.fullmatch(rf"dances/{dance_id}/[0-9a-f]{{32}}\.(mp4|mov|webm)", body.path):
+        raise HTTPException(400, "invalid video path")
+    url, headers = _storage_config()
+    try:
+        r = httpx.head(f"{url}/storage/v1/object/dance-videos/{body.path}",
+                       headers=headers, timeout=15)
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, "Could not verify uploaded video") from exc
+    if r.status_code != 200:
+        raise HTTPException(400, "Video has not finished uploading")
+    with session() as conn:
+        row = conn.execute("SELECT data FROM dances WHERE id = ?", (dance_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "dance not found")
+        data = loads(row["data"], {})
+        data["_videoPath"] = body.path
+        conn.execute("UPDATE dances SET data = ? WHERE id = ?", (json.dumps(data), dance_id))
+    return {"ok": True}
+
+
+def _signed_video_url(path):
+    url, headers = _storage_config()
+    try:
+        r = httpx.post(f"{url}/storage/v1/object/sign/dance-videos/{path}",
+                       headers=headers, json={"expiresIn": 3600}, timeout=15)
+        r.raise_for_status()
+        signed = r.json()["signedURL"]
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        raise HTTPException(502, "Could not load saved video") from exc
+    if signed.startswith("/storage/v1/"):
+        return url + signed
+    if signed.startswith("/object/"):
+        return url + "/storage/v1" + signed
+    if signed.startswith("https://"):
+        return signed
+    raise HTTPException(502, "Unexpected storage URL")
 
 
 # ---------- models ----------
@@ -103,7 +186,7 @@ def list_dances():
             "id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
             "difficulty": r["difficulty"], "steps": len(data.get("steps", [])),
             "duration": data["frames"][-1]["t"] if data.get("frames") else 0,
-            "hasVideo": _video_path(r["id"]) is not None,
+            "hasVideo": bool(loads(r["data"], {}).get("_videoPath")) or _video_path(r["id"]) is not None,
             "dancer": data.get("dancer"),  # which person the lesson follows, if the video has several
         })
     return out
@@ -148,7 +231,7 @@ def get_dance(dance_id: int):
     if not r:
         raise HTTPException(404, "dance not found")
     return {"id": r["id"], "name": r["name"], "bpm": r["bpm"], "builtin": bool(r["builtin"]),
-            "difficulty": r["difficulty"], "hasVideo": _video_path(dance_id) is not None,
+            "difficulty": r["difficulty"], "hasVideo": bool(loads(r["data"], {}).get("_videoPath")) or _video_path(dance_id) is not None,
             "data": loads(r["data"])}
 
 
@@ -262,6 +345,8 @@ def delete_take(user: str):
 
 @app.get("/dances/{dance_id}/video")
 def get_video(dance_id: int):
+    if stored := _video_storage_path(dance_id):
+        return RedirectResponse(_signed_video_url(stored), status_code=307)
     path = _video_path(dance_id)
     if not path:
         raise HTTPException(404, "no video for this dance")

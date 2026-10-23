@@ -1,4 +1,8 @@
-export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
+const previewBackend = 'https://dancr-2w68-git-fix-no-login-reliability-anwitaj11.vercel.app'
+const productionBackend = 'https://dancr-2w68.vercel.app'
+const isPreview = typeof window !== 'undefined' && window.location.hostname.includes('fix-no-login-reliability')
+const defaultBackend = import.meta.env.PROD ? (isPreview ? previewBackend : productionBackend) : 'http://localhost:8000'
+export const API_URL = import.meta.env.VITE_API_URL || defaultBackend
 
 // fetch() only throws when the request never got an answer, almost always because
 // the backend isn't running. Say that instead of the browser's "Failed to fetch".
@@ -39,13 +43,13 @@ export const api = {
   report: (user) => json(`/report/${encodeURIComponent(user)}`, { method: 'POST' }),
   tts: (text) => request('/tts', { method: 'POST', body: { text } }).then((r) => r.blob()),
   remix: (text) => json('/remix', { method: 'POST', body: { request: text } }),
-  uploadVideo: (id, file) =>
-    send(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-      .then(async (r) => {
-        if (r.ok) return
-        const detail = await r.json().then((b) => b?.detail).catch(() => null)
-        throw new Error(`video upload failed: ${typeof detail === 'string' ? detail : r.status}`)
-      }),
+  uploadVideo: async (id, file) => {
+    const contentType = file.type || 'video/mp4'
+    const { url, path } = await json(`/dances/${id}/video-upload?content_type=${encodeURIComponent(contentType)}`, { method: 'POST' })
+    const uploaded = await send(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file })
+    if (!uploaded.ok) throw new Error(`Video storage upload failed: ${uploaded.status}`)
+    await json(`/dances/${id}/video-complete`, { method: 'POST', body: { path } })
+  },
   // Saved multi-person scan: null when the dance doesn't have one (older uploads).
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
   getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
