@@ -39,13 +39,13 @@ export const api = {
   report: (user) => json(`/report/${encodeURIComponent(user)}`, { method: 'POST' }),
   tts: (text) => request('/tts', { method: 'POST', body: { text } }).then((r) => r.blob()),
   remix: (text) => json('/remix', { method: 'POST', body: { request: text } }),
-  uploadVideo: (id, file) =>
-    send(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-      .then(async (r) => {
-        if (r.ok) return
-        const detail = await r.json().then((b) => b?.detail).catch(() => null)
-        throw new Error(`video upload failed: ${typeof detail === 'string' ? detail : r.status}`)
-      }),
+  uploadVideo: async (id, file) => {
+    const contentType = file.type || 'video/mp4'
+    const { url, path } = await json(`/dances/${id}/video-upload?content_type=${encodeURIComponent(contentType)}`, { method: 'POST' })
+    const uploaded = await send(url, { method: 'PUT', headers: { 'Content-Type': contentType }, body: file })
+    if (!uploaded.ok) throw new Error(`Video storage upload failed: ${uploaded.status}`)
+    await json(`/dances/${id}/video-complete`, { method: 'POST', body: { path } })
+  },
   // Saved multi-person scan: null when the dance doesn't have one (older uploads).
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
   getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
