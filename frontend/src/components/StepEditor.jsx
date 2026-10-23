@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fromCuts, mergeWithNext, moveCut, splitAt, splitIntoSteps, toCuts } from '../lib/steps.js'
+import { fromCuts, mergeWithNext, moveCut, splitAt, splitByMotion, toCuts } from '../lib/steps.js'
 import SkeletonPlayer from './SkeletonPlayer.jsx'
 
 const fmt = (t) => `${t.toFixed(2)}s`
@@ -35,7 +35,7 @@ export default function StepEditor({ dance, videoSrc, onChange }) {
   }
 
   function resetToAuto() {
-    apply(toCuts(splitIntoSteps(duration, dance.bpm, dance.countStart ?? 0)))
+    apply(toCuts(splitByMotion(dance.frames, dance.bpm, dance.countStart ?? 0)))
   }
 
   const getTime = useCallback(() => timeRef.current, [])
