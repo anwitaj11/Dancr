@@ -14,6 +14,58 @@ export function splitIntoSteps(duration, bpm, countStart = 0, countsPerStep = 8)
   return steps
 }
 
+
+/**
+ * Movement-aware phrasing: find transitions near musical count boundaries.
+ * Candidate boundaries are spaced on the BPM grid, then shifted toward local
+ * changes in pose velocity (a stop, accent, or direction change).
+ * Falls back to plain BPM splitting if pose data is unavailable.
+ */
+export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
+  if (!frames?.length || !Number.isFinite(bpm) || bpm <= 0) return []
+  const duration = frames.at(-1).t
+  const base = splitIntoSteps(duration, bpm, countStart, countsPerStep)
+  if (base.length < 2 || frames.length < 8) return base
+  const stepLength = countsPerStep * 60 / bpm
+  const beat = 60 / bpm
+  const energy = frames.map((frame, i) => {
+    if (!i || !frame.pose || !frames[i - 1].pose) return 0
+    const dt = Math.max(0.025, frame.t - frames[i - 1].t)
+    const a = frame.pose, b = frames[i - 1].pose
+    const joints = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+    let total = 0, n = 0
+    for (const j of joints) {
+      if (!a[j] || !b[j]) continue
+      total += Math.hypot(a[j][0] - b[j][0], a[j][1] - b[j][1]) / dt
+      n++
+    }
+    return n ? total / n : 0
+  })
+  const smooth = energy.map((_, i) => {
+    const lo = Math.max(0, i - 2), hi = Math.min(energy.length, i + 3)
+    return energy.slice(lo, hi).reduce((a, b) => a + b, 0) / (hi - lo)
+  })
+  const cuts = [base[0].start]
+  for (let i = 1; i < base.length; i++) {
+    const nominal = base[i].start
+    const window = Math.min(beat * 1.5, stepLength * 0.22)
+    let best = nominal, score = -Infinity
+    for (let j = 2; j < frames.length - 2; j++) {
+      const t = frames[j].t
+      if (Math.abs(t - nominal) > window || t <= cuts.at(-1) + stepLength * 0.55) continue
+      const before = smooth[j - 2], now = smooth[j], after = smooth[j + 2]
+      const pause = Math.max(0, (before + after) / 2 - now)
+      const accent = Math.abs(after - before)
+      const closeness = 1 - Math.abs(t - nominal) / window
+      const candidate = pause * 1.4 + accent * 0.55 + closeness * 0.18
+      if (candidate > score) { score = candidate; best = t }
+    }
+    cuts.push(round(best))
+  }
+  cuts.push(base.at(-1).end)
+  return fromCuts(cuts, base.map(s => s.label), bpm)
+}
+
 /**
  * Re-chunk steps for the learner: 4 counts (half steps), 8 (as-is) or 16 (pairs).
  * Each chunk remembers which original steps it covers.
