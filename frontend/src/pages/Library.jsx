@@ -72,12 +72,16 @@ export default function Library() {
   const [profile, setProfile] = useState(null)
 
   const [removing, setRemoving] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  async function remove(ids, message) {
+  async function remove(ids, message, publicDance = false) {
     if (!window.confirm(message)) return
     setRemoving(true)
     try {
-      for (const id of ids) await api.deleteDance(id)
+      for (const id of ids) {
+        if (publicDance) await api.adminDeletePublicDance(id)
+        else await api.deleteDance(id)
+      }
       setDances(await api.listDances())
     } catch (e) {
       setError(e.message)
@@ -88,6 +92,7 @@ export default function Library() {
 
   useEffect(() => {
     api.listDances().then(setDances).catch((e) => setError(e.message))
+    api.adminStatus().then((r) => setIsAdmin(Boolean(r.admin))).catch(() => setIsAdmin(false))
     api.getProfile(user).then(setProfile).catch(() => {})
   }, [user])
 
@@ -189,6 +194,10 @@ export default function Library() {
                 {d.mine && d.hasVideo && (
                   <Link to={`/dancer/${d.id}`} className="link-btn">👥 {d.dancer ? 'change dancer' : 'choose dancer'}</Link>
                 )}
+                {isAdmin && !d.mine && <button type="button" className="link-btn remove-btn" disabled={removing}
+                  onClick={() => remove([d.id], `ADMIN: Permanently delete public tutorial "${d.name}" for EVERYONE? This also deletes its practice history.`, true)}>
+                  🗑 admin: delete public
+                </button>}
                 {d.mine && <button type="button" className="link-btn remove-btn" disabled={removing} aria-label={`Remove ${d.name}`}
                   onClick={() => remove([d.id], `Remove "${d.name}" from the library (and its practice history)?`)}>
                   🗑 remove
