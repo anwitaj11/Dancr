@@ -15,7 +15,7 @@ import ChooseDancer from './pages/ChooseDancer.jsx'
 import VoiceCoach from './components/VoiceCoach.jsx'
 import { CoachContextProvider } from './lib/coachContext.jsx'
 
-function Shell() {
+function Shell({ session, onSignIn }) {
   const user = currentUser()
   const { pathname } = useLocation()
   // Calibration is full-screen camera.
@@ -32,8 +32,14 @@ function Shell() {
             <NavLink to="/upload">Upload</NavLink>
             <NavLink to="/profile">My Practice</NavLink>
           </nav>
-          <span className="user" title="Signed-in account">@{user.slice(0, 12)}</span>
-          <button type="button" className="link-btn" onClick={() => supabase.auth.signOut()}>Log out</button>
+          {session ? (
+            <>
+              <span className="user" title="Signed-in account">@{user.slice(0, 12)}</span>
+              <button type="button" className="link-btn" onClick={() => supabase.auth.signOut()}>Log out</button>
+            </>
+          ) : (
+            <button type="button" className="btn-pink" onClick={onSignIn}>Sign in / Sign up</button>
+          )}
           <a href="/#dances" className="cta">Let's Dance! <span aria-hidden="true">→</span></a>
         </header>
       )}
@@ -63,21 +69,23 @@ function Shell() {
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [recovering, setRecovering] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setCurrentUser(data.session?.user?.id || 'guest') }).catch(() => setSession(null))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === 'PASSWORD_RECOVERY') setRecovering(true)
       setSession(next)
+      if (next && event !== 'PASSWORD_RECOVERY') setShowLogin(false)
       setCurrentUser(next?.user?.id || 'guest')
     })
     return () => subscription.unsubscribe()
   }, [])
   if (session === undefined) return <div className="page-loading"><div className="spinner" /></div>
-  if (!session || recovering) return <Login onRecovered={() => setRecovering(false)} />
+  if (recovering || (!session && showLogin)) return <Login onRecovered={() => setRecovering(false)} onGuest={() => setShowLogin(false)} />
   return (
     <BrowserRouter>
       <CoachContextProvider>
-        <Shell />
+        <Shell session={session} onSignIn={() => setShowLogin(true)} />
       </CoachContextProvider>
     </BrowserRouter>
   )
