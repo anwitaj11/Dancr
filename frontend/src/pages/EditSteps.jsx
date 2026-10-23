@@ -12,10 +12,20 @@ export default function EditSteps() {
   const [steps, setSteps] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
-    api.getDance(id).then(setEntry).catch((e) => setError(e.message))
-  }, [id])
+    let active = true
+    setEntry(null)
+    setSteps(null)
+    setError(null)
+    api.getDance(id).then((d) => {
+      if (!active) return
+      if (!d?.data?.frames?.length || !d.data.steps?.length) throw new Error('This dance has no steps to edit. Please upload it again.')
+      setEntry(d)
+    }).catch((e) => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [id, retry])
 
   const onChange = useCallback((next) => setSteps(next), [])
 
@@ -30,7 +40,7 @@ export default function EditSteps() {
     }
   }
 
-  if (error && !entry) return <p className="note-card warn">{error}</p>
+  if (error && !entry) return <div className="note-card warn" role="alert"><p>{error}</p><button type="button" className="btn-pink" onClick={() => setRetry((n) => n + 1)}>Try again ↻</button> <Link to="/">Back to library</Link></div>
   if (!entry) return <div className="page-loading"><div className="spinner" /></div>
 
   return (
@@ -42,7 +52,7 @@ export default function EditSteps() {
       <Win title={`${entry.name.toUpperCase().replace(/\W+/g, '_')}_STEPS.txt`} color="pink" className="upload-win">
         <h2 className="section-title small">{entry.name}</h2>
         <p className="muted">Practice history stays attached to the dance; step numbers follow your new split.</p>
-        <StepEditor dance={entry.data} videoSrc={entry.hasVideo ? api.videoUrl(id) : null} onChange={onChange} />
+        <StepEditor key={id} dance={entry.data} videoSrc={entry.hasVideo ? api.videoUrl(id) : null} onChange={onChange} />
         <div className="row">
           <button className="btn-teal" onClick={save} disabled={saving || !steps}>{saving ? 'saving…' : 'save steps & practice →'}</button>
           <Link to={`/practice/${id}`} className="btn-bracket">[ CANCEL ]</Link>

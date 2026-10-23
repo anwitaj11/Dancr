@@ -18,7 +18,6 @@ export default function Upload() {
   const [name, setName] = useState('')
   const [bpm, setBpm] = useState(100)
   const [countStart, setCountStart] = useState(0)
-  const [builtin, setBuiltin] = useState(false)
   const [progress, setProgress] = useState(null)
   const [dance, setDance] = useState(null)
   const [processed, setProcessed] = useState(null) // processed video, while choosing who to follow
@@ -40,7 +39,7 @@ export default function Upload() {
     if (dance) document.getElementById('upload-steps')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [dance === null]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const replacing = library.find((d) => String(d.id) === String(replaceId))
+  const replacing = library.find((d) => d.mine && String(d.id) === String(replaceId))
 
   // Replacing a built-in: start from its name and tempo.
   useEffect(() => {
@@ -95,7 +94,7 @@ export default function Upload() {
     try {
       const id = replacing
         ? (await api.replaceDance(replacing.id, dance)).id
-        : (await api.createDance(dance, { builtin })).id
+        : (await api.createDance(dance)).id
       // Keep the original clip so the feed and practice screen can show it.
       await api.uploadVideo(id, file)
       // Optional extra: lets "change dancer" skip rescanning the video later.
@@ -155,7 +154,7 @@ export default function Upload() {
           <label>Add it as
             <select value={replaceId} onChange={(e) => setReplaceId(e.target.value)}>
               <option value="">A new dance</option>
-              {library.filter((d) => d.builtin).map((d) => (
+              {library.filter((d) => d.mine).map((d) => (
                 <option key={d.id} value={d.id}>Replace {d.name}{d.hasVideo ? '' : ' (demo figure)'}</option>
               ))}
             </select>
@@ -165,9 +164,6 @@ export default function Upload() {
           <label>Count 1 starts at (seconds)
             <input type="number" step="0.05" value={countStart} min={0} onChange={(e) => setCountStart(e.target.value)} />
           </label>
-          {!replacing && (
-            <label className="check"><input type="checkbox" checked={builtin} onChange={(e) => setBuiltin(e.target.checked)} /> Add to the built-in library</label>
-          )}
           <p className="hint-text">Tip: full body in frame, plain background, good light, phone held still. Clap or count "5, 6, 7, 8" at the start, and put the time of count 1 above.</p>
           <button className="btn-pink wide" disabled={!file || progress !== null} onClick={process}>
             {progress !== null ? `PROCESSING… ${Math.round(progress * 100)}%` : 'TURN IT INTO A LESSON ✦'}

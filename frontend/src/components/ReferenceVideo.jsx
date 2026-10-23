@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { poseAt } from '../lib/people.js'
 import { containRect, drawDancerMarker } from '../lib/skeleton.js'
 
-const DRIFT = 0.15 // seconds before we hard-seek back into sync
+const DRIFT = 0.6 // tolerate small playback drift instead of repeatedly seeking video
 
 /**
  * The original reference video, kept in sync with the practice clock.
@@ -16,6 +16,7 @@ const DRIFT = 0.15 // seconds before we hard-seek back into sync
 export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, playing, mirror, muted = true, volume = 1, className, dancer }) {
   const ref = useRef(null)
   const marker = useRef(null)
+  const lastSeek = useRef(0)
 
   useEffect(() => {
     const video = ref.current
@@ -25,7 +26,10 @@ export default function ReferenceVideo({ src, getTime, offset = 0, speed = 1, pl
       video.playbackRate = speed
       if (playing) {
         if (video.paused) video.play().catch(() => {})
-        if (Math.abs(video.currentTime - target) > DRIFT) video.currentTime = target
+        if (video.readyState >= 2 && Math.abs(video.currentTime - target) > DRIFT && performance.now() - lastSeek.current > 1500) {
+          lastSeek.current = performance.now()
+          video.currentTime = Math.max(0, Math.min(target, video.duration || target))
+        }
       } else {
         if (!video.paused) video.pause()
         if (Math.abs(video.currentTime - target) > 0.04) video.currentTime = target

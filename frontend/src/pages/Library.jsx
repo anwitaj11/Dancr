@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
+import { usePrivateVideoUrl } from '../lib/usePrivateVideoUrl.js'
 import { pct } from '../lib/scoring.js'
 import { useCoachSummary } from '../lib/coachContext.jsx'
 import SkeletonPlayer from '../components/SkeletonPlayer.jsx'
@@ -28,12 +29,13 @@ function useDance(summary) {
 /** A dance's real video on loop, or its neon demo figure until a video is added. */
 function DancePreview({ summary, i = 0, small = false }) {
   const dance = useDance(summary)
+  const videoSrc = usePrivateVideoUrl(summary?.id, Boolean(summary?.hasVideo))
   if (!summary) return <div className="preview-empty">✦</div>
   if (summary.hasVideo && summary.dancer && dance?.dancer) {
-    return <MarkedVideo src={api.videoUrl(summary.id)} dance={dance} small={small} />
+    return <MarkedVideo src={videoSrc} dance={dance} small={small} />
   }
   if (summary.hasVideo) {
-    return <video src={api.videoUrl(summary.id)} className="fill cover" autoPlay loop muted playsInline preload="metadata" />
+    return <video src={videoSrc} className="fill cover" autoPlay loop muted playsInline preload="metadata" />
   }
   return dance ? (
     <SkeletonPlayer dance={dance} end={Math.min(6, summary.duration)} width={small ? 160 : 300} height={small ? 160 : 400}
@@ -70,12 +72,16 @@ export default function Library() {
   const [profile, setProfile] = useState(null)
 
   const [removing, setRemoving] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  async function remove(ids, message) {
+  async function remove(ids, message, publicDance = false) {
     if (!window.confirm(message)) return
     setRemoving(true)
     try {
-      for (const id of ids) await api.deleteDance(id)
+      for (const id of ids) {
+        if (publicDance) await api.adminDeletePublicDance(id)
+        else await api.deleteDance(id)
+      }
       setDances(await api.listDances())
     } catch (e) {
       setError(e.message)
@@ -86,6 +92,7 @@ export default function Library() {
 
   useEffect(() => {
     api.listDances().then(setDances).catch((e) => setError(e.message))
+    api.adminStatus().then((r) => setIsAdmin(Boolean(r.admin))).catch(() => setIsAdmin(false))
     api.getProfile(user).then(setProfile).catch(() => {})
   }, [user])
 
@@ -146,13 +153,14 @@ export default function Library() {
       <section id="dances" className="dances grid-bg">
         <p className="script center">pick ur obsession ↓</p>
         <h2 className="section-title">the dance library</h2>
-        {list.some((d) => !d.hasVideo) && (
+        <p className="muted">My Library: {list.filter(d => d.mine).length} private dances · Public tutorials: {list.filter(d => !d.mine).length}</p>
+        {list.some((d) => d.mine && !d.hasVideo) && (
           <div className="note-card add-video">
             🎥 Some dances are still demo stick figures.{' '}
             <Link to="/upload"><b>Add the real video →</b></Link>{' '}
             <button type="button" className="link-btn" disabled={removing}
               onClick={() => {
-                const demos = list.filter((d) => !d.hasVideo)
+                const demos = list.filter((d) => d.mine && !d.hasVideo)
                 remove(demos.map((d) => d.id), `Remove ${demos.length} demo ${demos.length === 1 ? 'dance' : 'dances'} (and their practice history)?`)
               }}>
               {removing ? 'removing…' : '🗑 remove all demo figures'}
@@ -178,17 +186,22 @@ export default function Library() {
               <div className="dance-meta">
                 <span className="tag tag-pink">{d.steps} {d.steps === 1 ? 'STEP' : 'STEPS'} · {LEVELS[d.difficulty] ?? 'Advanced'}</span>
                 <span className="tag tag-blue">♫ {Math.round(d.bpm)} BPM</span>
+                <span className="tag tag-blue">{d.mine ? "MY LIBRARY" : "PUBLIC TUTORIAL"}</span>
                 {!d.hasVideo && <span className="tag tag-ghost">demo figure</span>}
                 {d.dancer && (
                   <span className="tag dancer-chip" style={{ background: d.dancer.color }}>👤 DANCER {d.dancer.number} OF {d.dancer.people}</span>
                 )}
-                {d.hasVideo && (
+                {d.mine && d.hasVideo && (
                   <Link to={`/dancer/${d.id}`} className="link-btn">👥 {d.dancer ? 'change dancer' : 'choose dancer'}</Link>
                 )}
-                <button type="button" className="link-btn remove-btn" disabled={removing} aria-label={`Remove ${d.name}`}
+                {isAdmin && !d.mine && <button type="button" className="link-btn remove-btn" disabled={removing}
+                  onClick={() => remove([d.id], `ADMIN: Permanently delete public tutorial "${d.name}" for EVERYONE? This also deletes its practice history.`, true)}>
+                  🗑 admin: delete public
+                </button>}
+                {d.mine && <button type="button" className="link-btn remove-btn" disabled={removing} aria-label={`Remove ${d.name}`}
                   onClick={() => remove([d.id], `Remove "${d.name}" from the library (and its practice history)?`)}>
                   🗑 remove
-                </button>
+                </button>}
               </div>
             </div>
           ))}

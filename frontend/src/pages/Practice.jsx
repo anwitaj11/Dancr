@@ -1,3 +1,4 @@
+import { usePrivateVideoUrl } from '../lib/usePrivateVideoUrl.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { api, currentUser } from '../lib/api.js'
@@ -140,6 +141,8 @@ export default function Practice() {
   const { id } = useParams()
   const user = currentUser()
   const [dance, setDance] = useState(null)
+  const [danceError, setDanceError] = useState(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [profile, setProfile] = useState(null)
   const [chunkCounts, setChunkCounts] = useState(8)
   const [chunkIdx, setChunkIdx] = useState(0)
@@ -187,7 +190,18 @@ export default function Practice() {
   const lastCueBeat = useRef(0)
 
   useEffect(() => {
-    api.getDance(id).then((d) => { setDance(refreshAngles(d.data)); setHasVideo(d.hasVideo); setDifficulty(d.difficulty) })
+    let active = true
+    setDance(null)
+    setDanceError(null)
+    api.getDance(id).then((d) => {
+      if (!active) return
+      if (!d?.data?.frames?.length || !d.data.steps?.length) {
+        throw new Error('This dance has no usable movement steps. Please re-upload or edit its steps.')
+      }
+      setDance(refreshAngles(d.data))
+      setHasVideo(d.hasVideo)
+      setDifficulty(d.difficulty)
+    }).catch((e) => { if (active) setDanceError(e.message) })
     // Count-in first (needed soonest), then the spoken cues, all in the ElevenLabs voice.
     preloadCounts().then(() => preloadLines(['Step complete!', 'You nailed it!', ...ALL_CUES]))
     api.getProfile(user).then((p) => {
@@ -195,9 +209,10 @@ export default function Practice() {
       setChunkCounts(p.adaptations.chunkCounts)
       setSpeed(nearestSpeed(p.adaptations.speed))
     }).catch(() => {})
-    return () => timers.current.forEach(clearTimeout)
-  }, [id, user])
+    return () => { active = false; timers.current.forEach(clearTimeout) }
+  }, [id, user, loadAttempt])
 
+  const privateVideoSrc = usePrivateVideoUrl(id, hasVideo)
   const chunks = useMemo(() => (dance ? buildChunks(dance.steps, chunkCounts) : []), [dance, chunkCounts])
   // Video with several people: mark the one this lesson follows.
   const dancerMarker = useMemo(() => (dance?.dancer && markerMode !== 'off' ? {
@@ -491,7 +506,15 @@ export default function Practice() {
   ].filter(Boolean).join(' ') : '')
 
   if (!isCalibrated()) return <Navigate to={`/calibrate?next=/practice/${id}`} replace />
-  if (!dance) return <div className="page-loading"><div className="spinner" /></div>
+  if (!dance) return danceError ? (
+    <section className="page-loading">
+      <div className="note-card warn" role="alert">
+        <p>Couldn't load this dance: {danceError}</p>
+        <button type="button" className="btn-pink" onClick={() => setLoadAttempt((n) => n + 1)}>Try loading again ↻</button>
+        <p><Link to="/">← Back to dance library</Link></p>
+      </div>
+    </section>
+  ) : <div className="page-loading"><div className="spinner" /></div>
 
   const patterns = profile?.patterns ?? []
   const ringValue = live?.overall ?? result?.overall ?? 0
@@ -536,7 +559,7 @@ export default function Practice() {
             <div className="duet">
               <div className="duet-half tutorial">
                 {hasVideo ? (
-                  <ReferenceVideo src={api.videoUrl(id)} getTime={refTime} offset={dance.videoOffset ?? 0}
+                  <ReferenceVideo src={privateVideoSrc} getTime={refTime} offset={dance.videoOffset ?? 0}
                     speed={speed} playing={phase === 'dancing' || phase === 'preview'} mirror={mirror}
                     muted={!musicOn} volume={ducked ? 0.25 : 0.9} className="fill" dancer={dancerMarker} />
                 ) : (
@@ -645,7 +668,7 @@ export default function Practice() {
               <button key={i} className="polaroid-btn" disabled={busy} onClick={() => pickChunk(i)}>
                 <Polaroid caption={c.label.toLowerCase()} badge={i + 1} tilt={i % 2 ? 1.5 : -1.5} active={i === chunkIdx}>
                   {hasVideo ? (
-                    <video src={`${api.videoUrl(id)}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
+                    <video src={`${privateVideoSrc}#t=${(c.start + (dance.videoOffset ?? 0)).toFixed(2)}`} muted playsInline preload="auto" className="fill cover" />
                   ) : (
                     <SkeletonPlayer dance={dance} start={c.start} end={c.end} width={160} height={160} color="#ff3ea5" glow={6} lineWidth={5} className="fill" />
                   )}

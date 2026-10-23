@@ -1,4 +1,8 @@
-export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
+import { supabase } from './supabase.js'
+// Preview deployments use the matching hosted backend, never a visitor's localhost.
+const previewBackend = 'https://dancr-2w68-git-fix-supabase-persistent-demo-anwitaj11.vercel.app'
+const isDemoPreview = typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')
+export const API_URL = isDemoPreview ? previewBackend : (import.meta.env?.VITE_API_URL || 'http://localhost:8000')
 
 // fetch() only throws when the request never got an answer, almost always because
 // the backend isn't running. Say that instead of the browser's "Failed to fetch".
@@ -6,14 +10,15 @@ async function send(url, init) {
   try {
     return await fetch(url, init)
   } catch {
-    throw new Error(`can't reach the Dancr backend at ${API_URL}. Is the backend window running (uvicorn app.main:app --reload)?`)
+    throw new Error(`Can't connect to the Dancr API at ${API_URL}. Check the hosted backend or your network connection.`)
   }
 }
 
 async function request(path, { method = 'GET', body } = {}) {
+  const { data: { session } } = await supabase.auth.getSession()
   const res = await send(`${API_URL}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -28,6 +33,8 @@ const json = (path, opts) => request(path, opts).then((r) => r.json())
 
 export const api = {
   listDances: () => json('/dances'),
+  adminStatus: () => json('/admin/me'),
+  adminDeletePublicDance: (id) => json(`/admin/public-dances/${id}`, { method: 'DELETE' }),
   getDance: (id) => json(`/dances/${id}`),
   replaceDance: (id, dance) =>
     json(`/dances/${id}`, { method: 'PUT', body: { name: dance.name, bpm: dance.bpm, data: dance } }),
@@ -39,24 +46,39 @@ export const api = {
   report: (user) => json(`/report/${encodeURIComponent(user)}`, { method: 'POST' }),
   tts: (text) => request('/tts', { method: 'POST', body: { text } }).then((r) => r.blob()),
   remix: (text) => json('/remix', { method: 'POST', body: { request: text } }),
-  uploadVideo: (id, file) =>
-    send(`${API_URL}/dances/${id}/video`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-      .then(async (r) => {
-        if (r.ok) return
-        const detail = await r.json().then((b) => b?.detail).catch(() => null)
-        throw new Error(`video upload failed: ${typeof detail === 'string' ? detail : r.status}`)
-      }),
+  uploadVideo: async (id, file) => {
+    if (file.size > 200 * 1024 * 1024) throw new Error('video must be under 200MB')
+    const type = file.type || 'video/mp4'
+    const signed = await json(`/dances/${id}/video-upload?content_type=${encodeURIComponent(type)}`, { method: 'POST' })
+    const uploaded = await fetch(signed.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': type },
+      body: file,
+    })
+    if (!uploaded.ok) throw new Error(`private video upload failed: ${uploaded.status}`)
+    await json(`/dances/${id}/video-complete`, { method: 'POST', body: { path: signed.path } })
+  },
   // Saved multi-person scan: null when the dance doesn't have one (older uploads).
   savePeople: (id, scan) => request(`/dances/${id}/people`, { method: 'PUT', body: scan }),
-  getPeople: (id) => send(`${API_URL}/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)),
+  getPeople: (id) => request(`/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   // The dancer's latest recorded try (one per user, replaced each time).
-  saveTake: (user, blob, meta) =>
-    send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
-      method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
-    }),
-  getTake: (user) => send(`${API_URL}/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)),
-  takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
+  saveTake: async (user, blob, meta) => {
+    if (blob.size > 200 * 1024 * 1024) throw new Error('Practice video must be under 200MB')
+    const type = blob.type.split(';')[0] || 'video/webm'
+    const signed = await json(`/takes/${encodeURIComponent(user)}/upload-url?content_type=${encodeURIComponent(type)}`, { method: 'POST' })
+    const uploaded = await send(signed.url, { method: 'PUT', headers: { 'Content-Type': type }, body: blob })
+    if (!uploaded.ok) throw new Error(`Practice upload failed: ${uploaded.status}`)
+    return json(`/takes/${encodeURIComponent(user)}/complete`, { method: 'POST', body: {
+      path: signed.path, dance_id: Number(meta.dance_id), step: meta.step ?? '',
+      score: Number(meta.score ?? 0), passed: String(meta.passed) === 'true',
+      speed: Number(meta.speed ?? 1), start: Number(meta.start ?? 0),
+      mirror: String(meta.mirror) === 'true',
+    } })
+  },
+  takeVideoUrl: (user) => json(`/takes/${encodeURIComponent(user)}/video-url`).then(r => r.url),
+  getTake: (user) => json(`/takes/${encodeURIComponent(user)}`),
   deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
+  signedVideoUrl: (id) => json(`/dances/${id}/video-url`).then((result) => result.url),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
   deleteDance: (id) => json(`/dances/${id}`, { method: 'DELETE' }),
   voiceSession: () => json('/voice-agent/session'),
