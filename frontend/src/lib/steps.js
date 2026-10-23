@@ -2,9 +2,11 @@
 export function splitIntoSteps(duration, bpm, countStart = 0, countsPerStep = 8) {
   const stepLength = (countsPerStep * 60) / bpm
   const steps = []
-  for (let start = countStart, i = 0; start + stepLength / 2 < duration; start += stepLength, i++) {
+  // Include the intro before count 1 so the timeline remains editable from 0s.
+  if (countStart > 0.5 && countStart < duration) steps.push({ index: 0, start: 0, end: round(countStart), counts: Math.max(1, Math.round(countStart * bpm / 60)), label: 'Intro' })
+  for (let start = Math.max(0, countStart), i = 0; start + stepLength / 2 < duration; start += stepLength, i++) {
     steps.push({
-      index: i,
+      index: steps.length,
       start: round(start),
       end: round(Math.min(start + stepLength, duration)),
       counts: countsPerStep,
@@ -26,7 +28,7 @@ export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
   const fallback = splitIntoSteps(duration, bpm, countStart, countsPerStep)
   if (frames.length < 12 || !frames.some(f => f.pose?.length >= 13)) return fallback
   const beat = 60 / bpm
-  const start = Math.max(0, Math.min(duration, countStart))
+  const start = 0 // include the full available dance, even before the first musical count
   const joints = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12]
   const motion = frames.map((f, i) => {
     if (!i || !f.pose || !frames[i - 1].pose) return 0
@@ -67,7 +69,7 @@ export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
     const isMinimum = here <= smooth[i - 1] && here <= smooth[i + 1]
     if (!isMinimum && transition < 0.4) continue
     // Prefer half-bar and bar boundaries, but do not require them.
-    const beatsFromStart = (t - start) / beat
+    const beatsFromStart = (t - countStart) / beat
     const beatDistance = Math.abs(beatsFromStart - Math.round(beatsFromStart))
     const halfBarDistance = Math.abs(beatsFromStart / 4 - Math.round(beatsFromStart / 4))
     const rhythm = 0.18 * (1 - Math.min(1, beatDistance * 2)) +
