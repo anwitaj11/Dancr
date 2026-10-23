@@ -1,4 +1,6 @@
-export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
+const previewBackend = 'https://dancr-2w68-git-fix-no-login-reliability-anwitaj11.vercel.app'
+const defaultBackend = import.meta.env.PROD ? previewBackend : 'http://localhost:8000'
+export const API_URL = import.meta.env.VITE_API_URL || defaultBackend
 
 // fetch() only throws when the request never got an answer, almost always because
 // the backend isn't running. Say that instead of the browser's "Failed to fetch".
