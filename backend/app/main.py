@@ -52,7 +52,18 @@ async def authenticate(request: Request, call_next):
         return await call_next(request)
     header = request.headers.get("authorization", "")
     if not header.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"detail": "Please sign in."})
+        # Public demo: visitors can browse shared dances without an account.
+        # All mutations and account-specific routes still require authentication.
+        public_read = request.method == "GET" and (
+            request.url.path == "/dances" or
+            (request.url.path.startswith("/dances/") and
+             request.url.path.count("/") == 2 and request.url.path.split("/")[-1].isdigit()) or
+            (request.url.path.startswith("/dances/") and request.url.path.endswith("/video-url"))
+        )
+        if public_read:
+            request.state.account_id = "guest"
+            return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "Sign in to save dances and track progress."})
     config = _storage_config()
     if not config:
         return JSONResponse(status_code=503, content={"detail": "Authentication is not configured."})
