@@ -1,5 +1,7 @@
 const previewBackend = 'https://dancr-2w68-git-fix-no-login-reliability-anwitaj11.vercel.app'
-const defaultBackend = import.meta.env.PROD ? previewBackend : 'http://localhost:8000'
+const productionBackend = 'https://dancr-2w68.vercel.app'
+const isPreview = typeof window !== 'undefined' && window.location.hostname.includes('fix-no-login-reliability')
+const defaultBackend = import.meta.env.PROD ? (isPreview ? previewBackend : productionBackend) : 'http://localhost:8000'
 export const API_URL = import.meta.env.VITE_API_URL || defaultBackend
 
 // fetch() only throws when the request never got an answer, almost always because
