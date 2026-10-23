@@ -1,5 +1,5 @@
 import { computeAngles } from './angles.js'
-import { splitIntoSteps } from './steps.js'
+import { splitByMotion } from './steps.js'
 
 export const DANCE_FORMAT_VERSION = 1
 
@@ -18,7 +18,7 @@ export function buildDance({ name, bpm, countStart = 0, fps = 30, aspect = 16 / 
     source,
     ...(dancer && { dancer }), // { number, people, color } when the video had several people
     frames: withAngles,
-    steps: steps ?? splitIntoSteps(duration, bpm, countStart),
+    steps: steps ?? splitByMotion(withAngles, bpm, countStart),
   }
 }
 
