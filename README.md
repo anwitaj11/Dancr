@@ -1,78 +1,90 @@
-# ✦ Dancr
+# Dancr
 
-An AI dance coach that teaches you 2016's dances through your webcam, watches
-how you move, works out how you learn, and adapts each lesson to you.
+**Learn the choreography. Practice the movement. See your progress.**
 
-- **Body tracking**: MediaPipe Pose runs in the browser. The video never leaves the device.
-- **Scoring**: compares 12 full-body angles (arms, hips, knees, feet, leg spread, torso lean) to the reference, so it works for any body size. Joints the camera can't see are skipped, not counted wrong. In each step the joints that move most count most, and standing still while the tutorial dances scores low. Scores show as a match percentage; 70%+ completes a step.
-- **Practice audio**: the uploaded video's own music plays along (it ducks under spoken lines), the count-in is beat-accurate, and an ElevenLabs voice gives a fix or some encouragement every half bar.
-- **Learning tracker**: every attempt updates a skill score per body part and detects your learning patterns.
-- **AI coach**: Claude writes the tips and session reports, and ElevenLabs speaks them.
+Dancr is a browser-based dance learning app that turns a reference video into a step-by-step practice session. It tracks movement through your webcam, compares your poses with the choreography, and offers feedback as you learn.
 
-## Quick start
+**[Live site](https://dancr.vercel.app)** · **[Development preview](https://dancr-git-fix-no-login-reliability-anwitaj11.vercel.app)**
+
+> **Release status:** The latest changes are merged into `main`, but the production deployment is awaiting an update. The preview currently has the newer step editor and persistence improvements.
+
+## What it does
+
+- **Upload choreography** — process a dance video and extract pose landmarks for the reference performance.
+- **Edit the steps** — start with suggested cuts, then split, merge, move, and rename sections manually. Auto-splitting is experimental; manual editing is the reliable option.
+- **Practice with your webcam** — follow a reference video alongside live pose tracking and movement-based scoring.
+- **Get coaching** — receive spoken cues and feedback through ElevenLabs, with browser speech fallback.
+- **Track improvement** — save practice attempts and review progress, strengths, and areas to revisit.
+- **Keep your library** — the deployed backend supports PostgreSQL-backed dance data and signed video storage through Supabase when configured.
+
+## How it works
+
+```text
+Reference video
+    ↓
+Pose extraction (MediaPipe)
+    ↓
+Editable choreography steps
+    ↓
+Webcam practice + pose comparison
+    ↓
+Feedback, scoring, and progress history
+```
+
+Dancr uses pose landmarks and joint angles rather than comparing raw camera images. The interface is built with **React + Vite**; the API uses **Python + FastAPI**. MediaPipe handles pose detection, while Claude and ElevenLabs power optional AI and voice features.
+
+## Run locally
+
+**Requirements:** Node.js, npm, and Python 3.
+
+Start the backend:
 
 ```bash
-# 1. Backend (FastAPI + SQLite), port 8000
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # add ANTHROPIC_API_KEY and ELEVENLABS_API_KEY
+cp .env.example .env
 uvicorn app.main:app --reload
+```
 
-# 2. Frontend (React + Vite), port 5173
+In another terminal, start the frontend:
+
+```bash
 cd frontend
-npm install                     # also copies the MediaPipe wasm into public/
-npm run seed                    # adds the placeholder built-in dances
+npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and allow camera access.
+Open **http://localhost:5173** and allow webcam access when practicing.
 
-**No API keys?** Everything still runs. The coach falls back to rule-based tips,
-and the voice falls back to the browser's built-in speech.
+The local backend can use SQLite. Hosted persistence and video uploads require additional Supabase/PostgreSQL configuration. See `backend/.env.example` for available settings; never commit credentials.
+
+**Optional integrations:** Claude and ElevenLabs improve coaching and speech, but the app includes fallback behavior when API keys are unavailable.
 
 ## Tests
 
 ```bash
-cd backend && pytest            # API flow, skill EMA, learner patterns
-cd frontend && npm test         # angles, scoring, timing, steps, remix
+cd backend && pytest
+cd frontend && npm test
 ```
 
-## Layout → checklist
+## Project structure
 
-| Process | Where |
-|---|---|
-| 1. Library & upload | `frontend/src/lib/processVideo.js`, `dance.js`, `steps.js`, `pages/Upload.jsx`, `pages/Library.jsx`, `components/SkeletonPlayer.jsx` |
-| 2. Live tracking | `hooks/useWebcamPose.js`, `lib/pose.js`, `lib/angles.js` (8 angles, smoothing, in-frame check), `pages/Calibrate.jsx` |
-| 3. Scoring & practice | `lib/scoring.js` (per-joint score, colors, ±0.5 s timing, loop stats), `pages/Practice.jsx` |
-| 4. Backend & data | `backend/app/db.py` (tables), `backend/app/main.py` (endpoints) |
-| 5. Learning tracker | `backend/app/learner.py` (EMA skills, 🐢⚡🎯⏱️📉 rules → lesson settings) |
-| 6. AI coach | `backend/app/coach.py` (Claude tips + report), `backend/app/tts.py` (ElevenLabs + cache), `frontend/src/lib/voice.js` |
-| 7. Dashboard | `pages/Dashboard.jsx` |
-| 8. Style remix (stretch) | `frontend/src/lib/remix.js`, `backend/app/remix.py`, `pages/Remix.jsx` |
-| 9. Share (stretch) | `components/VineRecorder.jsx` |
-| 10. 2016 design | `frontend/src/styles.css` |
+| Directory | Purpose |
+| --- | --- |
+| `frontend/src/pages/` | Library, upload, practice, and progress screens |
+| `frontend/src/components/` | Step editor, reference player, and pose visualization |
+| `frontend/src/lib/` | Video processing, step segmentation, scoring, and API client |
+| `backend/app/` | FastAPI routes, storage, coaching, voice, and learning data |
+| `docs/` | Dance format and voice-coach setup notes |
 
-The data format is in [`docs/dance-format.md`](docs/dance-format.md).
+For technical details, see [Dance format](docs/dance-format.md) and [Voice coach setup](docs/voice-coach.md).
 
-The 🎙️ voice coach (ElevenLabs agent) setup is in [`docs/voice-coach.md`](docs/voice-coach.md).
+## Current limitations
 
-## API
+Automatic step segmentation uses pose movement and an entered BPM; it does **not** yet analyze audio beats directly. You can adjust every suggested cut in the step editor. Pose tracking and scoring also depend on camera visibility, lighting, and reference-video quality.
 
-| Method | Path | What it does |
-|---|---|---|
-| `POST` | `/dances` | Save a dance (`{name, bpm, builtin, difficulty, data}`) |
-| `GET` | `/dances` | List the library (metadata only) |
-| `GET` | `/dances/{id}` | Full dance JSON, plus `hasVideo` |
-| `PUT` | `/dances/{id}` | Replace a dance's recording in place (`{name, bpm, data}`) |
-| `PUT` | `/dances/{id}/video` | Store the original clip (raw body, `video/mp4`, `video/webm` or `video/quicktime`) |
-| `GET` | `/dances/{id}/video` | The original clip, shown as the tutorial on the practice screen |
-| `POST` | `/attempts` | Save a loop result and get back the updated profile |
-| `GET` | `/profile/{user}` | Skills, patterns, adaptations, badge, history |
-| `POST` | `/coach` | One-sentence tip (`{user, context}`) |
-| `POST` | `/report/{user}` | Strengths, weaknesses, and a plan; saved as the latest report |
-| `POST` | `/tts` | MP3 of the text, cached on disk (503 if no key, and the frontend falls back) |
-| `POST` | `/tts/pregenerate` | Pre-generates "5, 6, 7, 8!", "Nice!", and the other stock lines |
-| `GET` | `/voice-agent/session` | How the browser connects to the Dancr Coach voice agent (a short-lived token; never the API key) |
-| `POST` | `/remix` | Turns a preset name or a free-text request into remix settings plus an explanation |
+---
 
+Built to make learning choreography more interactive, one step at a time.
