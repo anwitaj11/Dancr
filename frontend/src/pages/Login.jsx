@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Logo } from '../components/Retro.jsx'
 
-export default function Login() {
+export default function Login({ onRecovered }) {
   const [mode, setMode] = useState('login')
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -25,7 +25,8 @@ export default function Login() {
       if (mode === 'new-password') {
         const { error } = await supabase.auth.updateUser({ password })
         if (error) throw error
-        setMessage('Your password has been updated. You can continue to Dancr.')
+        setMessage('Your password has been updated.')
+        onRecovered?.()
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
         if (error) throw error
