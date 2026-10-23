@@ -76,13 +76,3 @@ The 🎙️ voice coach (ElevenLabs agent) setup is in [`docs/voice-coach.md`](d
 | `GET` | `/voice-agent/session` | How the browser connects to the Dancr Coach voice agent (a short-lived token; never the API key) |
 | `POST` | `/remix` | Turns a preset name or a free-text request into remix settings plus an explanation |
 
-## Still to do
-
-- [ ] **Record the real reference videos.** On the Upload page, choose "Replace Dab" (or another built-in)
-  under "Add it as", pick your recording, and save. The dance keeps its library slot and everyone's history,
-  and the feed and practice screen switch from the neon demo figure to your video.
-- [ ] Hand-check each built-in's step boundaries (`steps` in the dance JSON) against the choreography.
-- [ ] Tune the thresholds on real dancers: `PASS_SCORE` and the 45° falloff in `scoring.js`, and
-  the pattern thresholds in `learner.py`.
-- [ ] Run `POST /tts/pregenerate` once the ElevenLabs key is in.
-- [ ] Test in the Klaus Atrium lighting.
