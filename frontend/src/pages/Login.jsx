@@ -50,7 +50,7 @@ export default function Login({ onRecovered }) {
         <h1 style={{ marginTop: 22 }}>{mode === 'signup' ? 'JOIN THE DANCE ✦' : mode === 'reset' || mode === 'new-password' ? 'RESET PASSWORD' : 'WELCOME BACK ✦'}</h1>
         <p>Save your dances, scores, and progress in your own account.</p>
         <form onSubmit={submit} className="upload-form">
-          <label>Email<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>
+          {mode !== 'new-password' && <label>Email<input type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>}
           {mode !== 'reset' && <label>Password<input type="password" minLength={6} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} required /></label>}
           {error && <p role="alert" className="warn">{error}</p>}
           {message && <p role="status">{message}</p>}
