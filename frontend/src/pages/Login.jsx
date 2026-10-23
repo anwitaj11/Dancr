@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { Logo } from '../components/Retro.jsx'
 
-export default function Login({ onRecovered }) {
+export default function Login({ onRecovered, onGuest }) {
   const [mode, setMode] = useState('login')
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -60,6 +60,7 @@ export default function Login({ onRecovered }) {
           <button type="button" className="link-btn" onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError(''); setMessage('') }}>{mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Sign up'}</button>
         </p>
         <button type="button" className="link-btn" onClick={() => { setMode(mode === 'reset' ? 'login' : 'reset'); setError(''); setMessage('') }}>{mode === 'reset' ? 'Back to sign in' : 'Forgot password?'}</button>
+        {onGuest && <p style={{ marginTop: 18 }}><button type="button" className="btn-bracket" onClick={onGuest}>[ CONTINUE WITHOUT ACCOUNT → ]</button></p>}
       </div>
     </section>
   )
