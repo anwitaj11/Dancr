@@ -56,7 +56,18 @@ export function crowdSize(raw, minFrames = Math.min(8, Math.ceil(raw.length * 0.
     // Prefer frames with exactly n people, so the picture's badges match the buttons.
     const exact = frames.filter(([f]) => f.poses.length === n)
     if (exact.length) frames.splice(0, frames.length, ...exact)
-    const clarity = ([f]) => f.poses.reduce((s, pose) => s + pose.reduce((v, p) => v + (p[2] ?? 1), 0), 0)
+    // Pick a frame where people are clearly separated, not merely a frame with
+    // high landmark confidence. Overlapping dancers make the selection ambiguous.
+    const clarity = ([f]) => {
+      const centers = f.poses.map(poseCenter)
+      const separation = centers.length < 2 ? 1 : Math.min(
+        ...centers.flatMap((center, i) => centers.slice(i + 1).map(
+          (other) => Math.hypot(center[0] - other[0], center[1] - other[1])
+        ))
+      )
+      const visibility = f.poses.reduce((s, pose) => s + pose.reduce((v, p) => v + (p[2] ?? 1), 0), 0)
+      return Math.min(separation, 0.5) * 100 + visibility / (f.poses.length || 1)
+    }
     const [, anchor] = frames.reduce((best, x) => (clarity(x) > clarity(best) ? x : best))
     return { people: n, anchor }
   }
