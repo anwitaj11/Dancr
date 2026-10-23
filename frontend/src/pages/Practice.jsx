@@ -736,6 +736,7 @@ export default function Practice() {
               )}
               <div className="row center">
                 <button className="btn-teal" onClick={() => start()}>↺ try again</button>
+                <Link className="btn-bracket" to="/profile">VIEW PRACTICE SUMMARY →</Link>
                 {chunkIdx < chunks.length - 1 && (
                   <button className="btn-pink" onClick={() => pickChunk(chunkIdx + 1)}>
                     {result.passed ? 'YES, MOVE ON →' : 'MOVE ON ANYWAY →'}
