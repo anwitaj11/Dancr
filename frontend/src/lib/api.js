@@ -1,5 +1,8 @@
 import { supabase } from './supabase.js'
-export const API_URL = import.meta.env?.VITE_API_URL ?? 'http://localhost:8000'
+// Preview deployments use the matching hosted backend, never a visitor's localhost.
+const previewBackend = 'https://dancr-2w68-git-fix-supabase-persistent-demo-anwitaj11.vercel.app'
+const isDemoPreview = typeof window !== 'undefined' && window.location.hostname.includes('fix-supabase-persistent-demo')
+export const API_URL = import.meta.env?.VITE_API_URL || (isDemoPreview ? previewBackend : 'http://localhost:8000')
 
 // fetch() only throws when the request never got an answer, almost always because
 // the backend isn't running. Say that instead of the browser's "Failed to fetch".
