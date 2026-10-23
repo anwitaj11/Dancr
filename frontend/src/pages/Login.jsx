@@ -16,16 +16,6 @@ export default function Login({ onRecovered, onGuest }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  async function signInWithGoogle() {
-    setBusy(true)
-    setError('')
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    })
-    if (error) { setError(error.message); setBusy(false) }
-  }
-
   async function submit(e) {
     e.preventDefault()
     setBusy(true)
@@ -66,7 +56,6 @@ export default function Login({ onRecovered, onGuest }) {
           {message && <p role="status">{message}</p>}
           <button className="btn-pink wide" type="submit" disabled={busy}>{busy ? 'one sec…' : mode === 'signup' ? 'CREATE ACCOUNT →' : mode === 'reset' ? 'SEND RESET LINK →' : mode === 'new-password' ? 'UPDATE PASSWORD →' : 'SIGN IN →'}</button>
         </form>
-        <button type="button" className="btn-bracket" style={{ width: "100%", marginTop: 16 }} disabled={busy} onClick={signInWithGoogle}>CONTINUE WITH GOOGLE →</button>
         <p style={{ marginTop: 16 }}>
           <button type="button" className="link-btn" onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError(''); setMessage('') }}>{mode === 'signup' ? 'Already have an account? Sign in' : 'New here? Sign up'}</button>
         </p>
