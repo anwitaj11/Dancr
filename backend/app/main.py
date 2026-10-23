@@ -88,7 +88,7 @@ class UploadedVideo(BaseModel):
 
 @app.post("/dances/{dance_id}/video-complete")
 def complete_video_upload(dance_id: int, body: UploadedVideo):
-    if not re.fullmatch(rf"dances/{dance_id}/[0-9a-f]{{32}}\\.(mp4|mov|webm)", body.path):
+    if not re.fullmatch(rf"dances/{dance_id}/[0-9a-f]{{32}}\.(mp4|mov|webm)", body.path):
         raise HTTPException(400, "invalid video path")
     url, headers = _storage_config()
     try:
