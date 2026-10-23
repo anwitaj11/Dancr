@@ -62,16 +62,18 @@ function Shell() {
 
 export default function App() {
   const [session, setSession] = useState(undefined)
+  const [recovering, setRecovering] = useState(false)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session)).catch(() => setSession(null))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => {
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setCurrentUser(data.session?.user?.id || 'guest') }).catch(() => setSession(null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
       setSession(next)
       setCurrentUser(next?.user?.id || 'guest')
     })
     return () => subscription.unsubscribe()
   }, [])
   if (session === undefined) return <div className="page-loading"><div className="spinner" /></div>
-  if (!session) return <Login />
+  if (!session || recovering) return <Login onRecovered={() => setRecovering(false)} />
   return (
     <BrowserRouter>
       <CoachContextProvider>
