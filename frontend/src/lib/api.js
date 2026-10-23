@@ -58,15 +58,20 @@ export const api = {
   getPeople: (id) => request(`/dances/${id}/people`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   // The dancer's latest recorded try (one per user, replaced each time).
   saveTake: async (user, blob, meta) => {
-    const { data: { session } } = await supabase.auth.getSession()
-    const res = await send(`${API_URL}/takes/${encodeURIComponent(user)}?${new URLSearchParams(meta)}`, {
-      method: 'PUT', headers: { 'Content-Type': blob.type, ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: blob,
-    })
-    if (!res.ok) throw new Error(`Saving practice recording failed: ${res.status}`)
-    return res
+    if (blob.size > 200 * 1024 * 1024) throw new Error('Practice video must be under 200MB')
+    const type = blob.type.split(';')[0] || 'video/webm'
+    const signed = await json(`/takes/${encodeURIComponent(user)}/upload-url?content_type=${encodeURIComponent(type)}`, { method: 'POST' })
+    const uploaded = await send(signed.url, { method: 'PUT', headers: { 'Content-Type': type }, body: blob })
+    if (!uploaded.ok) throw new Error(`Practice upload failed: ${uploaded.status}`)
+    return json(`/takes/${encodeURIComponent(user)}/complete`, { method: 'POST', body: {
+      path: signed.path, dance_id: Number(meta.dance_id), step: meta.step ?? '',
+      score: Number(meta.score ?? 0), passed: String(meta.passed) === 'true',
+      speed: Number(meta.speed ?? 1), start: Number(meta.start ?? 0),
+      mirror: String(meta.mirror) === 'true',
+    } })
   },
-  getTake: (user) => request(`/takes/${encodeURIComponent(user)}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-  takeVideoUrl: (user, version = '') => `${API_URL}/takes/${encodeURIComponent(user)}/video?v=${version}`,
+  takeVideoUrl: (user) => json(`/takes/${encodeURIComponent(user)}/video-url`).then(r => r.url),
+  getTake: (user) => json(`/takes/${encodeURIComponent(user)}`),
   deleteTake: (user) => json(`/takes/${encodeURIComponent(user)}`, { method: 'DELETE' }),
   signedVideoUrl: (id) => json(`/dances/${id}/video-url`).then((result) => result.url),
   videoUrl: (id) => `${API_URL}/dances/${id}/video`,
