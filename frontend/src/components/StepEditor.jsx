@@ -14,7 +14,12 @@ const STEP_COLORS = ['var(--hot)', 'var(--cyan)', 'var(--yellow)', 'var(--lilac)
 export default function StepEditor({ dance, videoSrc, onChange }) {
   const duration = dance.frames.at(-1).t
   const offset = dance.videoOffset ?? 0
-  const [{ cuts, labels }, setEdit] = useState(() => toCuts(dance.steps))
+  const [{ cuts, labels }, setEdit] = useState(() => {
+    const saved = toCuts(dance.steps)
+    return saved.cuts[0] > 0.5
+      ? { cuts: [0, ...saved.cuts], labels: ['Intro', ...saved.labels] }
+      : saved
+  })
   const [time, setTime] = useState(cuts[0])
   const videoRef = useRef(null)
   const timeRef = useRef(time)
@@ -35,7 +40,8 @@ export default function StepEditor({ dance, videoSrc, onChange }) {
   }
 
   function resetToAuto() {
-    apply(toCuts(splitByMotion(dance.frames, dance.bpm, dance.countStart ?? 0)))
+    const next = splitByMotion(dance.frames, dance.bpm, dance.countStart ?? 0)
+    if (next.length) apply(toCuts(next))
   }
 
   const getTime = useCallback(() => timeRef.current, [])
