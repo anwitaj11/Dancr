@@ -4,3 +4,4 @@ anthropic>=1.15
 httpx
 python-dotenv
 pytest
+psycopg[binary]>=3.2
