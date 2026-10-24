@@ -90,20 +90,31 @@ export class AngleSmoother {
 }
 
 /** Every tracked point is confidently visible and inside the frame. */
-export function bodyInFrame(pose, { minVisibility = 0.5, margin = 0.02 } = {}) {
-  const missing = pose.filter(
-    ([x, y, v]) => v < minVisibility || x < margin || x > 1 - margin || y < margin || y > 1 - margin,
-  )
-  return { ok: missing.length === 0, missing: missing.length }
+export function bodyInFrame(pose, { minVisibility = 0.35, margin = 0.015 } = {}) {
+  // Require a usable torso and arms, not every ankle/foot landmark.
+  // MediaPipe often loses distal points even with a well-framed dancer.
+  const required = [P.lShoulder, P.rShoulder, P.lHip, P.rHip]
+  const visible = (i) => {
+    const p = pose?.[i]
+    return p && (p[2] ?? 1) >= minVisibility &&
+      p[0] >= margin && p[0] <= 1 - margin &&
+      p[1] >= margin && p[1] <= 1 - margin
+  }
+  const coreOk = required.every(visible)
+  const arms = [P.lElbow, P.rElbow].filter(visible).length
+  const missing = required.filter(i => !visible(i)).length + Math.max(0, 1 - arms)
+  return { ok: coreOk && arms >= 1, missing }
 }
 
-export function isTPose(angles, tolerance = 25) {
-  return (
-    Math.abs(angles.leftShoulder - 90) < tolerance &&
-    Math.abs(angles.rightShoulder - 90) < tolerance &&
-    angles.leftElbow > 180 - tolerance &&
-    angles.rightElbow > 180 - tolerance
-  )
+export function isTPose(angles, tolerance = 35) {
+  // Don't require all four angles when one wrist or elbow is briefly occluded.
+  const shoulders = [angles.leftShoulder, angles.rightShoulder]
+    .filter(Number.isFinite)
+  const elbows = [angles.leftElbow, angles.rightElbow]
+    .filter(Number.isFinite)
+  return shoulders.length === 2 &&
+    shoulders.every(v => Math.abs(v - 90) <= tolerance) &&
+    (elbows.length === 0 || elbows.every(v => v >= 180 - tolerance))
 }
 
 function round(v, digits) {
