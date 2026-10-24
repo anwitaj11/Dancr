@@ -5,7 +5,7 @@ import { mirrorAngles } from './angles.js'
 // full match, and scores are shown as a plain percentage.
 export const FULL_CREDIT_ZONE = 8 // degrees off that still earn full credit
 export const ZERO_AT = 45 // degrees off where a joint earns nothing
-export const PASS_SCORE = 0.7 // 70%+ completes a step
+export const PASS_SCORE = 0.75 // 70%+ completes a step
 export const TIMING_WINDOW = 0.2 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
@@ -27,7 +27,10 @@ export function pct(score) {
  */
 export function scorePose(userAngles, refAngles, joints = JOINT_NAMES, weights = null) {
   const scores = {}, diffs = {}
-  let sum = 0, total = 0
+  let sum = 0, total = 0, expected = 0
+  for (const j of joints) {
+    expected += weights?.[j] ?? 1
+  }
   for (const j of joints) {
     if (j in userAngles && j in refAngles) {
       diffs[j] = userAngles[j] - refAngles[j]
@@ -37,7 +40,9 @@ export function scorePose(userAngles, refAngles, joints = JOINT_NAMES, weights =
       total += w
     }
   }
-  return { joints: scores, diffs, overall: total ? sum / total : 0 }
+  // Missing/occluded joints cannot silently produce a near-perfect score.
+  const coverage = expected ? total / expected : 0
+  return { joints: scores, diffs, overall: total ? (sum / total) * Math.min(1, coverage / 0.7) : 0 }
 }
 
 /**
@@ -81,26 +86,33 @@ export class MotionMeter {
    * count as "not moving".
    */
   travel() {
-    let user = 0, ref = 0
+    let user = 0, ref = 0, aligned = 0, observed = 0
     for (let i = 1; i < this.samples.length; i++) {
       const a = this.samples[i - 1], b = this.samples[i]
       for (const j of Object.keys(b.user)) {
         if (!(j in a.user) || !(j in a.ref) || !(j in b.ref)) continue
-        // Ignore small frame-to-frame pose jitter in both streams.
-        user += Math.max(0, Math.abs(b.user[j] - a.user[j]) - 1.5)
-        ref += Math.max(0, Math.abs(b.ref[j] - a.ref[j]) - 1.5)
+        const du = b.user[j] - a.user[j]
+        const dr = b.ref[j] - a.ref[j]
+        const u = Math.max(0, Math.abs(du) - 1.5)
+        const r = Math.max(0, Math.abs(dr) - 1.5)
+        user += u
+        ref += r
+        observed++
+        // Moving equally far in the opposite direction is not a match.
+        if (du * dr > 0) aligned += Math.min(u, r)
       }
     }
-    return { user, ref }
+    return { user, ref, aligned, observed }
   }
-  /** 0–1: how much the dancer moves compared with the tutorial (1 = as much or more). */
+  /** Score both movement amount AND direction relative to the reference. */
   ratio() {
-    if (this.samples.length < 3) return 1
-    const { user, ref } = this.travel()
-    if (ref < 35) return 1 // the tutorial is (nearly) holding still here: nothing to compare
-    // Full credit from FULL_MOTION of the tutorial's movement: webcam tracking is smoothed,
-    // so a dancer matching the moves measures a little less travel than the recording.
-    return Math.min(1, user / (ref * FULL_MOTION))
+    if (this.samples.length < 3) return 0.5 // not enough evidence for full credit
+    const { user, ref, aligned } = this.travel()
+    if (ref < 35) return 1 // reference pose is held; pose accuracy still applies
+    const amount = Math.min(1, user / (ref * FULL_MOTION))
+    const direction = Math.min(1, aligned / Math.max(1, ref * 0.65))
+    // Directional agreement matters; vigorous unrelated motion cannot score full.
+    return amount * (0.2 + 0.8 * direction)
   }
   reset() {
     this.samples = []
