@@ -6,7 +6,7 @@ import { mirrorAngles } from './angles.js'
 export const FULL_CREDIT_ZONE = 15 // degrees off that still earn full credit
 export const ZERO_AT = 60 // degrees off where a joint earns nothing
 export const PASS_SCORE = 0.7 // 70%+ completes a step
-export const TIMING_WINDOW = 0.5 // seconds, each side
+export const TIMING_WINDOW = 0.3 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
 /** 1 within FULL_CREDIT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
@@ -86,8 +86,9 @@ export class MotionMeter {
       const a = this.samples[i - 1], b = this.samples[i]
       for (const j of Object.keys(b.user)) {
         if (!(j in a.user) || !(j in a.ref) || !(j in b.ref)) continue
-        user += Math.abs(b.user[j] - a.user[j])
-        ref += Math.abs(b.ref[j] - a.ref[j])
+        // Ignore small frame-to-frame pose jitter in both streams.
+        user += Math.max(0, Math.abs(b.user[j] - a.user[j]) - 1.5)
+        ref += Math.max(0, Math.abs(b.ref[j] - a.ref[j]) - 1.5)
       }
     }
     return { user, ref }
@@ -148,12 +149,16 @@ export function matchWithTiming(userAngles, frames, t, { mirror = false, joints,
     let ref = sampleAt(frames, t + d).angles
     if (mirror) ref = mirrorAngles(ref)
     const s = scorePose(userAngles, ref, joints, weights)
-    // Prefer offsets near 0 on ties so a static pose doesn't read as off-beat.
-    if (!best || s.overall > best.overall + 1e-6 || (Math.abs(s.overall - best.overall) <= 1e-6 && Math.abs(d) < Math.abs(best.offset))) {
-      best = { ...s, offset: d }
+    // A tiny improvement at a distant frame is often pose noise, not actual timing.
+    // Regularize toward the current beat, and keep the reported pose score honest.
+    const rank = s.overall - 0.06 * Math.abs(d) / Math.max(window, 0.01)
+    if (!best || rank > best.rank + 1e-6 || (Math.abs(rank - best.rank) <= 1e-6 && Math.abs(d) < Math.abs(best.offset))) {
+      best = { ...s, offset: d, rank }
     }
   }
-  return best
+  if (!best) return { overall: 0, joints: {}, diffs: {}, offset: 0 }
+  const { rank, ...result } = best
+  return result
 }
 
 export function timingLabel(offset) {
