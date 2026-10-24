@@ -281,7 +281,19 @@ main.immersive { padding: 0; }
 .practice-page { padding: 24px 28px 48px; }
 .ticker-strip { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; background: var(--lime); border: var(--border); box-shadow: var(--shadow-sm); padding: 10px 14px; font-family: var(--mono); font-weight: 700; font-size: 0.75rem; }
 .practice-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin: 20px 0 14px; }
-.practice-head .headline { margin: 4px 0 12px; }
+.practice-head > div:first-child { min-width: 0; max-width: 100%; flex: 1 1 320px; }
+.practice-head .headline {
+  margin: 4px 0 12px;
+  max-width: 100%;
+  font-size: clamp(1.55rem, 3.6vw, 3.3rem);
+  line-height: 1.05;
+}
+.practice-head .headline .hl {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  -webkit-text-stroke: 0.045em var(--ink);
+  text-shadow: 0.035em 0.035em 0 var(--hot), 0.06em 0.06em 0 var(--ink);
+}
 .now-watching { font-family: var(--mono); font-weight: 700; font-size: 0.8rem; color: var(--blue); }
 .badge-pill { transform: rotate(-4deg); background: var(--teal); border: var(--border); box-shadow: var(--shadow-sm); border-radius: 99px; padding: 10px 22px; font-family: var(--script); font-size: 1.5rem; }
 .pattern-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }

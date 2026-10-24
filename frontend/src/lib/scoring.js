@@ -3,10 +3,10 @@ import { mirrorAngles } from './angles.js'
 
 // Forgiving scoring: small differences from the tutorial still count as a
 // full match, and scores are shown as a plain percentage.
-export const FULL_CREDIT_ZONE = 15 // degrees off that still earn full credit
+export const FULL_CREDIT_ZONE = 13 // degrees off that still earn full credit
 export const ZERO_AT = 60 // degrees off where a joint earns nothing
-export const PASS_SCORE = 0.7 // 70%+ completes a step
-export const TIMING_WINDOW = 0.5 // seconds, each side
+export const PASS_SCORE = 0.75 // 70%+ completes a step
+export const TIMING_WINDOW = 0.2 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
 /** 1 within FULL_CREDIT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
@@ -27,7 +27,10 @@ export function pct(score) {
  */
 export function scorePose(userAngles, refAngles, joints = JOINT_NAMES, weights = null) {
   const scores = {}, diffs = {}
-  let sum = 0, total = 0
+  let sum = 0, total = 0, expected = 0
+  for (const j of joints) {
+    expected += weights?.[j] ?? 1
+  }
   for (const j of joints) {
     if (j in userAngles && j in refAngles) {
       diffs[j] = userAngles[j] - refAngles[j]
@@ -37,7 +40,9 @@ export function scorePose(userAngles, refAngles, joints = JOINT_NAMES, weights =
       total += w
     }
   }
-  return { joints: scores, diffs, overall: total ? sum / total : 0 }
+  // Missing/occluded joints cannot silently produce a near-perfect score.
+  const coverage = expected ? total / expected : 0
+  return { joints: scores, diffs, overall: total ? (sum / total) * Math.min(1, coverage / 0.5) : 0 }
 }
 
 /**
@@ -64,7 +69,7 @@ export function jointWeights(frames, start, end, { full = 40, min = 0.15 } = {})
  * the last couple of seconds. ratio() is ~1 when they move as much (or more),
  * and drops toward 0 when they stand still while the tutorial dances.
  */
-const FULL_MOTION = 0.8
+const FULL_MOTION = 0.9
 
 export class MotionMeter {
   constructor(windowSec = 2) {
@@ -81,25 +86,33 @@ export class MotionMeter {
    * count as "not moving".
    */
   travel() {
-    let user = 0, ref = 0
+    let user = 0, ref = 0, aligned = 0, observed = 0
     for (let i = 1; i < this.samples.length; i++) {
       const a = this.samples[i - 1], b = this.samples[i]
       for (const j of Object.keys(b.user)) {
         if (!(j in a.user) || !(j in a.ref) || !(j in b.ref)) continue
-        user += Math.abs(b.user[j] - a.user[j])
-        ref += Math.abs(b.ref[j] - a.ref[j])
+        const du = b.user[j] - a.user[j]
+        const dr = b.ref[j] - a.ref[j]
+        const u = Math.max(0, Math.abs(du) - 3)
+        const r = Math.max(0, Math.abs(dr) - 2)
+        user += u
+        ref += r
+        observed++
+        // Moving equally far in the opposite direction is not a match.
+        if (du * dr > 0) aligned += Math.min(u, r)
       }
     }
-    return { user, ref }
+    return { user, ref, aligned, observed }
   }
-  /** 0–1: how much the dancer moves compared with the tutorial (1 = as much or more). */
+  /** Score both movement amount AND direction relative to the reference. */
   ratio() {
-    if (this.samples.length < 3) return 1
-    const { user, ref } = this.travel()
-    if (ref < 60) return 1 // the tutorial is (nearly) holding still here: nothing to compare
-    // Full credit from FULL_MOTION of the tutorial's movement: webcam tracking is smoothed,
-    // so a dancer matching the moves measures a little less travel than the recording.
-    return Math.min(1, user / (ref * FULL_MOTION))
+    if (this.samples.length < 3) return 0 // not enough evidence for movement credit
+    const { user, ref, aligned } = this.travel()
+    if (ref < 35) return 1 // reference pose is held; pose accuracy still applies
+    const amount = Math.min(1, user / (ref * FULL_MOTION))
+    const direction = Math.min(1, aligned / Math.max(1, ref * 0.5))
+    // Directional agreement matters; vigorous unrelated motion cannot score full.
+    return amount * (0.65 + 0.35 * direction)
   }
   reset() {
     this.samples = []
@@ -108,7 +121,7 @@ export class MotionMeter {
 
 /** Final score for a moment: pose match, scaled down when the dancer isn't moving like the tutorial. */
 export function withMotion(poseScore, motionRatio) {
-  return poseScore * (0.25 + 0.75 * motionRatio)
+  return poseScore * (0.08 + 0.92 * Math.max(0, Math.min(1, motionRatio)))
 }
 
 export function colorFor(score) {
@@ -148,12 +161,16 @@ export function matchWithTiming(userAngles, frames, t, { mirror = false, joints,
     let ref = sampleAt(frames, t + d).angles
     if (mirror) ref = mirrorAngles(ref)
     const s = scorePose(userAngles, ref, joints, weights)
-    // Prefer offsets near 0 on ties so a static pose doesn't read as off-beat.
-    if (!best || s.overall > best.overall + 1e-6 || (Math.abs(s.overall - best.overall) <= 1e-6 && Math.abs(d) < Math.abs(best.offset))) {
-      best = { ...s, offset: d }
+    // A tiny improvement at a distant frame is often pose noise, not actual timing.
+    // Regularize toward the current beat, and keep the reported pose score honest.
+    const rank = s.overall - 0.06 * Math.abs(d) / Math.max(window, 0.01)
+    if (!best || rank > best.rank + 1e-6 || (Math.abs(rank - best.rank) <= 1e-6 && Math.abs(d) < Math.abs(best.offset))) {
+      best = { ...s, offset: d, rank }
     }
   }
-  return best
+  if (!best) return { overall: 0, joints: {}, diffs: {}, offset: 0 }
+  const { rank, ...result } = best
+  return result
 }
 
 export function timingLabel(offset) {

@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useWebcamPose } from '../hooks/useWebcamPose.js'
 import { bodyInFrame, computeAngles, isTPose } from '../lib/angles.js'
 
-const HOLD_MS = 2000
+const HOLD_MS = 1200
+const TRACKING_GRACE_MS = 350
 
 export function markCalibrated() {
   try {
@@ -25,6 +26,7 @@ export default function Calibrate() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const holdStart = useRef(null)
+  const lastGood = useRef(null)
   const [stage, setStage] = useState('frame') // frame | tpose | done
   const [hold, setHold] = useState(0)
   const next = params.get('next') || '/'
@@ -32,14 +34,18 @@ export default function Calibrate() {
   const { videoRef, status, error } = useWebcamPose(({ pose, video, now }) => {
     if (stage === 'done') return
     if (!pose || !bodyInFrame(pose).ok) {
+      if (lastGood.current != null && now - lastGood.current < TRACKING_GRACE_MS) return
       holdStart.current = null
+      lastGood.current = null
       setHold(0)
       setStage('frame')
       return
     }
     setStage('tpose')
     if (isTPose(computeAngles(pose, video.videoWidth / video.videoHeight))) {
+      if (lastGood.current != null && now - lastGood.current > TRACKING_GRACE_MS) holdStart.current = null
       holdStart.current ??= now
+      lastGood.current = now
       const held = (now - holdStart.current) / HOLD_MS
       setHold(Math.min(1, held))
       if (held >= 1) {
@@ -48,14 +54,16 @@ export default function Calibrate() {
         setTimeout(() => navigate(next), 900)
       }
     } else {
+      if (lastGood.current != null && now - lastGood.current < TRACKING_GRACE_MS) return
       holdStart.current = null
+      lastGood.current = null
       setHold(0)
     }
   })
 
   const message = {
     frame: { emoji: '📏', title: 'Step back', body: 'Get your whole body, head to feet, inside the frame' },
-    tpose: { emoji: '🙆', title: 'Hold a T-pose', body: 'Arms straight out to the sides for 2 seconds' },
+    tpose: { emoji: '🙆', title: 'Hold a T-pose', body: 'Raise both arms to shoulder height and hold briefly' },
     done: { emoji: '✅', title: "You're all set", body: 'Tracking works. Let’s dance!' },
   }[stage]
 

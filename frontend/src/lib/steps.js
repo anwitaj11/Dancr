@@ -27,87 +27,79 @@ export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
   const duration = frames.at(-1).t
   const fallback = splitIntoSteps(duration, bpm, countStart, countsPerStep)
   if (frames.length < 12 || !frames.some(f => f.pose?.length >= 13)) return fallback
+
   const beat = 60 / bpm
-  const start = 0 // include the full available dance, even before the first musical count
   const joints = [1, 2, 3, 4, 5, 6, 9, 10, 11, 12]
+  // Body-relative motion removes camera scale and whole-body translation.
   const motion = frames.map((f, i) => {
-    if (!i || !f.pose || !frames[i - 1].pose) return 0
-    const prev = frames[i - 1]
-    const dt = f.t - prev.t
-    if (dt <= 0 || dt > 0.35) return 0
-    let total = 0, count = 0
+    if (!i || !f.pose || !frames[i - 1].pose) return null
+    const prev = frames[i - 1], dt = f.t - prev.t
+    if (dt <= 0 || dt > 0.4) return null
+    const hips = p => [(p[9][0] + p[10][0]) / 2, (p[9][1] + p[10][1]) / 2]
+    const center = hips(f.pose), before = hips(prev.pose)
+    const scale = Math.max(0.08, Math.hypot(f.pose[1][0] - f.pose[2][0], f.pose[1][1] - f.pose[2][1]))
+    let sum = 0, n = 0
     for (const j of joints) {
-      const a = f.pose[j], b = prev.pose[j]
-      if (!a || !b) continue
-      total += Math.hypot(a[0] - b[0], a[1] - b[1]) / dt
-      count++
+      const p = f.pose[j], q = prev.pose[j]
+      if (!p || !q || (p[2] ?? 1) < 0.5 || (q[2] ?? 1) < 0.5) continue
+      const distance = Math.hypot((p[0] - center[0]) - (q[0] - before[0]),
+        (p[1] - center[1]) - (q[1] - before[1]))
+      // Small landmark jitter is not choreography.
+      sum += Math.max(0, distance / scale - 0.008) / dt
+      n++
     }
-    return count ? total / count : 0
+    return n >= 4 ? sum / n : null
   })
-  // Smooth over ~0.15 seconds, independent of scan frame rate.
-  const smooth = motion.map((_, i) => {
-    let total = 0, n = 0
-    for (let j = i; j >= 0 && frames[i].t - frames[j].t <= 0.075; j--) { total += motion[j]; n++ }
-    for (let j = i + 1; j < frames.length && frames[j].t - frames[i].t <= 0.075; j++) { total += motion[j]; n++ }
-    return total / Math.max(1, n)
+  const valid = motion.filter(Number.isFinite).sort((a, b) => a - b)
+  if (valid.length < 10 || valid[Math.floor(valid.length * 0.8)] < 0.02) return fallback
+  const high = Math.max(0.02, valid[Math.floor(valid.length * 0.8)])
+  const smooth = frames.map((f, i) => {
+    let sum = 0, n = 0
+    for (let j = i; j >= 0 && f.t - frames[j].t <= 0.18; j--) {
+      if (motion[j] != null) { sum += motion[j]; n++ }
+    }
+    for (let j = i + 1; j < frames.length && frames[j].t - f.t <= 0.18; j++) {
+      if (motion[j] != null) { sum += motion[j]; n++ }
+    }
+    return n ? sum / n : high
   })
-  const ordered = [...smooth].sort((a, b) => a - b)
-  const median = ordered[Math.floor(ordered.length / 2)] || 0
-  const high = ordered[Math.floor(ordered.length * 0.8)] || median
-  if (high < 0.015) return fallback
-
-  // Candidate phrase boundaries: meaningful motion dips or sharp transitions.
-  const candidates = []
-  for (let i = 3; i < frames.length - 3; i++) {
-    const t = frames[i].t
-    if (t <= start + 2 * beat || t >= duration - 2 * beat) continue
-    const left = smooth[Math.max(0, i - 3)]
-    const right = smooth[Math.min(smooth.length - 1, i + 3)]
-    const here = smooth[i]
-    const dip = Math.max(0, (left + right) / 2 - here) / Math.max(0.03, high)
-    const transition = Math.abs(left - right) / Math.max(0.03, high)
-    const isMinimum = here <= smooth[i - 1] && here <= smooth[i + 1]
-    if (!isMinimum && transition < 0.4) continue
-    // Prefer half-bar and bar boundaries, but do not require them.
-    const beatsFromStart = (t - countStart) / beat
-    const beatDistance = Math.abs(beatsFromStart - Math.round(beatsFromStart))
-    const halfBarDistance = Math.abs(beatsFromStart / 4 - Math.round(beatsFromStart / 4))
-    const rhythm = 0.18 * (1 - Math.min(1, beatDistance * 2)) +
-      0.18 * (1 - Math.min(1, halfBarDistance * 4))
-    const score = dip * 1.3 + transition * 0.45 + rhythm
-    if (score >= 0.35) candidates.push({ t, score })
+  // For learning, short repeatable phrases matter more than long musical sections.
+  // Aim for about two seconds per step (roughly seven in a 14-second clip).
+  const targetSteps = Math.max(1, Math.round(duration / 2))
+  const minStep = Math.max(0.7, Math.min(1.15, duration / (targetSteps * 1.8)))
+  const maxStep = Math.max(2.6, duration / Math.max(1, targetSteps - 1))
+  const candidates = [0]
+  // Search around each nominal two-second boundary for the lowest motion.
+  // Keep the boundaries reasonably spaced even if pose tracking is unreliable.
+  for (let k = 1; k < targetSteps; k++) {
+    const nominal = duration * k / targetSteps
+    const previous = candidates.at(-1)
+    const remaining = targetSteps - k
+    const lower = Math.max(previous + minStep, nominal - 0.42)
+    const upper = Math.min(nominal + 0.42, duration - remaining * minStep)
+    let best = nominal, bestCost = Infinity
+    for (let i = 0; i < frames.length; i++) {
+      const t = frames[i].t
+      if (t < lower || t > upper) continue
+      const near = smooth[i]
+      const quiet = near / high
+      const rhythm = Math.abs((t - countStart) / beat - Math.round((t - countStart) / beat))
+      const distance = Math.abs(t - nominal) / 0.42
+      const cost = quiet * 0.5 + rhythm * 0.15 + distance * 0.55
+      if (cost < bestCost) { bestCost = cost; best = t }
+    }
+    const safe = Math.min(upper, Math.max(lower, best))
+    if (safe > previous + 0.5 && safe < duration - 0.5) candidates.push(round(safe))
   }
-  // Suppress multiple nearby candidates from the same transition.
-  candidates.sort((a, b) => b.score - a.score)
-  const peaks = []
-  for (const c of candidates) {
-    if (peaks.every(p => Math.abs(p.t - c.t) >= beat * 1.5)) peaks.push(c)
+  candidates.push(round(duration))
+  // No huge segments, even if the video has few detectable transitions.
+  const cuts = [candidates[0]]
+  for (let i = 1; i < candidates.length; i++) {
+    const end = candidates[i]
+    const from = cuts.at(-1)
+    const pieces = Math.max(1, Math.ceil((end - from) / maxStep))
+    for (let j = 1; j <= pieces; j++) cuts.push(round(from + (end - from) * j / pieces))
   }
-  peaks.sort((a, b) => a.t - b.t)
-
-  const cuts = [start]
-  const minLength = Math.max(1, 3.5 * beat)
-  const ideal = 8 * beat
-  const maxLength = 16 * beat
-  while (duration - cuts.at(-1) > maxLength) {
-    const prev = cuts.at(-1)
-    const eligible = peaks.filter(p => p.t >= prev + minLength && p.t <= Math.min(duration - minLength, prev + maxLength))
-    // Strong motion evidence can beat the 8-count default.
-    const best = eligible.map(p => ({
-      ...p, rank: p.score - 0.42 * Math.abs(p.t - (prev + ideal)) / ideal,
-    })).sort((a, b) => b.rank - a.rank)[0]
-    const next = best && best.rank > 0.25 ? best.t : Math.min(prev + ideal, duration - minLength)
-    if (next <= prev + 0.5) break
-    cuts.push(round(next))
-  }
-  // For the final phrase, use a good transition when it avoids a long section.
-  const prev = cuts.at(-1)
-  if (duration - prev > ideal * 1.3) {
-    const eligible = peaks.filter(p => p.t >= prev + minLength && p.t <= duration - minLength)
-    const best = eligible.sort((a, b) => b.score - a.score)[0]
-    if (best && best.score > 0.5) cuts.push(round(best.t))
-  }
-  cuts.push(round(duration))
   return fromCuts(cuts, cuts.slice(0, -1).map((_, i) => `Step ${i + 1}`), bpm)
 }
 
