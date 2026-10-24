@@ -3,10 +3,10 @@ import { mirrorAngles } from './angles.js'
 
 // Forgiving scoring: small differences from the tutorial still count as a
 // full match, and scores are shown as a plain percentage.
-export const FULL_CREDIT_ZONE = 15 // degrees off that still earn full credit
-export const ZERO_AT = 60 // degrees off where a joint earns nothing
+export const FULL_CREDIT_ZONE = 8 // degrees off that still earn full credit
+export const ZERO_AT = 45 // degrees off where a joint earns nothing
 export const PASS_SCORE = 0.7 // 70%+ completes a step
-export const TIMING_WINDOW = 0.3 // seconds, each side
+export const TIMING_WINDOW = 0.2 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
 
 /** 1 within FULL_CREDIT_ZONE degrees, falling linearly to 0 at ZERO_AT degrees off. */
@@ -64,7 +64,7 @@ export function jointWeights(frames, start, end, { full = 40, min = 0.15 } = {})
  * the last couple of seconds. ratio() is ~1 when they move as much (or more),
  * and drops toward 0 when they stand still while the tutorial dances.
  */
-const FULL_MOTION = 0.8
+const FULL_MOTION = 0.9
 
 export class MotionMeter {
   constructor(windowSec = 2) {
@@ -97,7 +97,7 @@ export class MotionMeter {
   ratio() {
     if (this.samples.length < 3) return 1
     const { user, ref } = this.travel()
-    if (ref < 60) return 1 // the tutorial is (nearly) holding still here: nothing to compare
+    if (ref < 35) return 1 // the tutorial is (nearly) holding still here: nothing to compare
     // Full credit from FULL_MOTION of the tutorial's movement: webcam tracking is smoothed,
     // so a dancer matching the moves measures a little less travel than the recording.
     return Math.min(1, user / (ref * FULL_MOTION))
@@ -109,7 +109,7 @@ export class MotionMeter {
 
 /** Final score for a moment: pose match, scaled down when the dancer isn't moving like the tutorial. */
 export function withMotion(poseScore, motionRatio) {
-  return poseScore * (0.25 + 0.75 * motionRatio)
+  return poseScore * (0.1 + 0.9 * motionRatio)
 }
 
 export function colorFor(score) {
