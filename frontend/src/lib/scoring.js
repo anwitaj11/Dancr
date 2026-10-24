@@ -93,8 +93,8 @@ export class MotionMeter {
         if (!(j in a.user) || !(j in a.ref) || !(j in b.ref)) continue
         const du = b.user[j] - a.user[j]
         const dr = b.ref[j] - a.ref[j]
-        const u = Math.max(0, Math.abs(du) - 1.5)
-        const r = Math.max(0, Math.abs(dr) - 1.5)
+        const u = Math.max(0, Math.abs(du) - 3)
+        const r = Math.max(0, Math.abs(dr) - 2)
         user += u
         ref += r
         observed++
@@ -106,7 +106,7 @@ export class MotionMeter {
   }
   /** Score both movement amount AND direction relative to the reference. */
   ratio() {
-    if (this.samples.length < 3) return 0.5 // not enough evidence for full credit
+    if (this.samples.length < 3) return 0 // not enough evidence for movement credit
     const { user, ref, aligned } = this.travel()
     if (ref < 35) return 1 // reference pose is held; pose accuracy still applies
     const amount = Math.min(1, user / (ref * FULL_MOTION))
@@ -121,7 +121,7 @@ export class MotionMeter {
 
 /** Final score for a moment: pose match, scaled down when the dancer isn't moving like the tutorial. */
 export function withMotion(poseScore, motionRatio) {
-  return poseScore * (0.45 + 0.55 * motionRatio)
+  return poseScore * (0.08 + 0.92 * Math.max(0, Math.min(1, motionRatio)))
 }
 
 export function colorFor(score) {
