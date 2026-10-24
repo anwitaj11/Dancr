@@ -63,55 +63,43 @@ export function splitByMotion(frames, bpm, countStart = 0, countsPerStep = 8) {
     }
     return n ? sum / n : high
   })
-  // Use actual rhythmic boundaries instead of cuts on arbitrary video frames.
-  // A 4-count grid offers enough resolution for short phrases.
-  const grid = [0]
-  for (let k = Math.ceil((0 - countStart) / (4 * beat)); ; k++) {
-    const t = countStart + k * 4 * beat
-    if (t >= duration - 0.5) break
-    if (t > 0.5) grid.push(t)
-  }
-  grid.push(duration)
-  grid.sort((a, b) => a - b)
-  const times = grid.filter((t, i) => !i || t - grid[i - 1] > 0.15)
-  const quality = times.map((t, idx) => {
-    if (idx === 0 || idx === times.length - 1) return 0
-    let best = 0, distance = Infinity
+  // For learning, short repeatable phrases matter more than long musical sections.
+  // Aim for about two seconds per step (roughly seven in a 14-second clip).
+  const targetSteps = Math.max(1, Math.round(duration / 2))
+  const minStep = Math.max(0.7, Math.min(1.15, duration / (targetSteps * 1.8)))
+  const maxStep = Math.max(2.6, duration / Math.max(1, targetSteps - 1))
+  const candidates = [0]
+  // Search around each nominal two-second boundary for the lowest motion.
+  // Keep the boundaries reasonably spaced even if pose tracking is unreliable.
+  for (let k = 1; k < targetSteps; k++) {
+    const nominal = duration * k / targetSteps
+    const previous = candidates.at(-1)
+    const remaining = targetSteps - k
+    const lower = Math.max(previous + minStep, nominal - 0.42)
+    const upper = Math.min(nominal + 0.42, duration - remaining * minStep)
+    let best = nominal, bestCost = Infinity
     for (let i = 0; i < frames.length; i++) {
-      const d = Math.abs(frames[i].t - t)
-      if (d < distance) { distance = d; best = i }
+      const t = frames[i].t
+      if (t < lower || t > upper) continue
+      const near = smooth[i]
+      const quiet = near / high
+      const rhythm = Math.abs((t - countStart) / beat - Math.round((t - countStart) / beat))
+      const distance = Math.abs(t - nominal) / 0.42
+      const cost = quiet * 0.5 + rhythm * 0.15 + distance * 0.55
+      if (cost < bestCost) { bestCost = cost; best = t }
     }
-    const near = smooth[best]
-    const before = smooth[Math.max(0, best - 3)]
-    const after = smooth[Math.min(smooth.length - 1, best + 3)]
-    const valley = Math.max(0, (before + after) / 2 - near) / high
-    const stillness = Math.max(0, 1 - near / high)
-    return Math.min(1.5, valley * 0.9 + stillness * 0.65)
-  })
-  // Global optimization prevents greedy cuts from creating huge or tiny final steps.
-  const cost = Array(times.length).fill(Infinity), previous = Array(times.length).fill(-1)
-  cost[0] = 0
-  for (let i = 1; i < times.length; i++) {
-    for (let j = 0; j < i; j++) {
-      const length = times[i] - times[j]
-      if (length < Math.max(0.5, 3 * beat) && i !== times.length - 1) continue
-      if (length > 16 * beat + 0.5) continue
-      const counts = length / beat
-      const phraseCost = Math.min(...[4, 8, 12, 16].map(c => Math.abs(counts - c) / 4))
-      const shortPenalty = counts < 3 ? 2 : 0
-      const cutReward = i === times.length - 1 ? 0 : quality[i]
-      const candidate = cost[j] + 0.35 + phraseCost * 0.7 + shortPenalty - cutReward * 0.6
-      if (candidate < cost[i]) { cost[i] = candidate; previous[i] = j }
-    }
+    const safe = Math.min(upper, Math.max(lower, best))
+    if (safe > previous + 0.5 && safe < duration - 0.5) candidates.push(round(safe))
   }
-  if (previous.at(-1) < 0) return fallback
-  const cuts = []
-  for (let i = times.length - 1; i >= 0; i = previous[i]) {
-    cuts.push(round(times[i]))
-    if (i === 0) break
+  candidates.push(round(duration))
+  // No huge segments, even if the video has few detectable transitions.
+  const cuts = [candidates[0]]
+  for (let i = 1; i < candidates.length; i++) {
+    const end = candidates[i]
+    const from = cuts.at(-1)
+    const pieces = Math.max(1, Math.ceil((end - from) / maxStep))
+    for (let j = 1; j <= pieces; j++) cuts.push(round(from + (end - from) * j / pieces))
   }
-  cuts.reverse()
-  if (cuts.length < 2) return fallback
   return fromCuts(cuts, cuts.slice(0, -1).map((_, i) => `Step ${i + 1}`), bpm)
 }
 
