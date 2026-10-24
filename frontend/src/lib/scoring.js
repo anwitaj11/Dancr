@@ -3,8 +3,8 @@ import { mirrorAngles } from './angles.js'
 
 // Forgiving scoring: small differences from the tutorial still count as a
 // full match, and scores are shown as a plain percentage.
-export const FULL_CREDIT_ZONE = 10 // degrees off that still earn full credit
-export const ZERO_AT = 52 // degrees off where a joint earns nothing
+export const FULL_CREDIT_ZONE = 13 // degrees off that still earn full credit
+export const ZERO_AT = 60 // degrees off where a joint earns nothing
 export const PASS_SCORE = 0.75 // 70%+ completes a step
 export const TIMING_WINDOW = 0.2 // seconds, each side
 const TIMING_LABEL_THRESHOLD = 0.15
@@ -112,7 +112,7 @@ export class MotionMeter {
     const amount = Math.min(1, user / (ref * FULL_MOTION))
     const direction = Math.min(1, aligned / Math.max(1, ref * 0.5))
     // Directional agreement matters; vigorous unrelated motion cannot score full.
-    return amount * (0.45 + 0.55 * direction)
+    return amount * (0.65 + 0.35 * direction)
   }
   reset() {
     this.samples = []
@@ -121,7 +121,7 @@ export class MotionMeter {
 
 /** Final score for a moment: pose match, scaled down when the dancer isn't moving like the tutorial. */
 export function withMotion(poseScore, motionRatio) {
-  return poseScore * (0.25 + 0.75 * motionRatio)
+  return poseScore * (0.45 + 0.55 * motionRatio)
 }
 
 export function colorFor(score) {
